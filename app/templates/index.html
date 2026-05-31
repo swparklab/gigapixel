@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -8,29 +8,48 @@
 </head>
 <body>
   <main class="container">
-    <h1>Gigapixel Heritage Viewer</h1>
-    <p>다중 이미지 업로드 → 자동 스티칭 → DZI 생성 → 웹 뷰어까지 한 번에 실행합니다.</p>
+    <section class="prefs-bar">
+      <div class="prefs-group">
+        <label id="langLabel" for="langSelect">Language</label>
+        <select id="langSelect">
+          <option value="ko">한국어</option>
+          <option value="en">English</option>
+        </select>
+      </div>
+      <div class="prefs-group">
+        <label id="themeLabel" for="themeSelect">Theme</label>
+        <select id="themeSelect">
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </div>
+    </section>
+
+    <h1 id="pageTitle">Gigapixel Heritage Viewer</h1>
+    <p><a id="openWorkflowLink" href="/workflow">Open Node Workflow</a></p>
+    <p id="pageSubtitle">Upload multiple images and run stitching, DZI generation, and viewer sharing in one flow.</p>
 
     <section class="panel">
-      <label for="sessionName">세션 이름</label>
-      <input id="sessionName" type="text" placeholder="예: Gyeongbokgung 1910 Scan" />
+      <label id="sessionNameLabel" for="sessionName">Session Name</label>
+      <input id="sessionName" type="text" placeholder="e.g. Gyeongbokgung 1910 Scan" />
 
-      <label for="files">이미지 파일들 (2장 이상)</label>
+      <label id="filesLabel" for="files">Image Files (at least 2)</label>
       <input id="files" type="file" multiple accept="image/*" />
 
-      <label for="stitchMode">스티칭 모드</label>
+      <label id="stitchModeLabel" for="stitchMode">Stitch Mode</label>
       <select id="stitchMode">
-        <option value="scans">scans (문서/평면 촬영 권장)</option>
-        <option value="panorama">panorama (풍경 파노라마 권장)</option>
+        <option id="stitchModeScans" value="scans">scans (recommended for flat/document scans)</option>
+        <option id="stitchModePanorama" value="panorama">panorama (recommended for scene panoramas)</option>
       </select>
 
-      <button id="startBtn">세션 생성 및 처리 시작</button>
-      <button id="nextBtn" type="button" class="secondary hidden">다음 결과물 생성 준비</button>
+      <button id="startBtn">Create Session and Start Processing</button>
+      <button id="nextBtn" type="button" class="secondary hidden">Prepare Next Output</button>
       <p id="status"></p>
       <p id="share"></p>
     </section>
   </main>
 
+  <script src="/static/ui-prefs.js"></script>
   <script src="/static/index.js"></script>
 </body>
 </html>

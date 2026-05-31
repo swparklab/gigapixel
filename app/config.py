@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     max_source_pixels: int = 10_000_000_000
     tile_size: int = 256
     tile_overlap: int = 1
+    optimized_jpeg_quality: int = 85
+    agent_poll_interval_seconds: float = 1.0
 
     model_config = SettingsConfigDict(
         env_file=".env",

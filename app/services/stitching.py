@@ -47,3 +47,44 @@ def save_stitched_image(stitched, output_path: Path) -> tuple[int, int]:
         raise RuntimeError(f"Failed to save stitched image to {output_path}")
     height, width = stitched.shape[:2]
     return width, height
+
+
+def save_stitched_variants(
+    stitched,
+    raw_output_path: Path,
+    optimized_output_path: Path,
+    optimized_jpeg_quality: int = 85,
+) -> tuple[int, int]:
+    raw_output_path.parent.mkdir(parents=True, exist_ok=True)
+    optimized_output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Raw: lossless, high-resolution output with minimal processing.
+    raw_ok, raw_encoded = cv2.imencode(
+        ".png",
+        stitched,
+        [cv2.IMWRITE_PNG_COMPRESSION, 0],
+    )
+    if not raw_ok:
+        raise RuntimeError(f"Failed to save raw stitched image to {raw_output_path}")
+    raw_encoded.tofile(str(raw_output_path))
+
+    # Optimized: same resolution, smaller size with JPEG compression.
+    jpeg_quality = int(max(1, min(100, optimized_jpeg_quality)))
+    opt_ok, opt_encoded = cv2.imencode(
+        ".jpg",
+        stitched,
+        [
+            cv2.IMWRITE_JPEG_QUALITY,
+            jpeg_quality,
+            cv2.IMWRITE_JPEG_PROGRESSIVE,
+            1,
+            cv2.IMWRITE_JPEG_OPTIMIZE,
+            1,
+        ],
+    )
+    if not opt_ok:
+        raise RuntimeError(f"Failed to save optimized stitched image to {optimized_output_path}")
+    opt_encoded.tofile(str(optimized_output_path))
+
+    height, width = stitched.shape[:2]
+    return width, height

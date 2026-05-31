@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -10,18 +10,36 @@
 <body>
   <main class="viewer-layout">
     <section class="sidebar">
-      <h2 id="title">Session</h2>
+      <section class="prefs-bar">
+        <div class="prefs-group">
+          <label id="langLabel" for="langSelect">Language</label>
+          <select id="langSelect">
+            <option value="ko">한국어</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+        <div class="prefs-group">
+          <label id="themeLabel" for="themeSelect">Theme</label>
+          <select id="themeSelect">
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
+      </section>
+
+      <h2 id="sessionHeading">Session</h2>
       <p id="meta"></p>
-      <button id="refreshBtn">상태 새로고침</button>
-      <button id="downloadBtn" disabled>최종 결과물 다운로드</button>
-      <button id="newSessionBtn" type="button" class="secondary">새 세션 만들기</button>
+      <button id="refreshBtn">Refresh Status</button>
+      <button id="downloadRawBtn" disabled>Download Raw High-Res</button>
+      <button id="downloadOptimizedBtn" disabled>Download Optimized</button>
+      <button id="newSessionBtn" type="button" class="secondary">New Session</button>
 
       <hr />
-      <h3>Annotation</h3>
-      <p>뷰어에서 클릭하면 좌표를 담아 입력창이 열립니다.</p>
+      <h3 id="annotationHeading">Annotation</h3>
+      <p id="annotationGuide">Click in viewer to pick coordinates, then write your note.</p>
       <div class="annotation-form">
-        <input id="annText" type="text" placeholder="주석 내용" />
-        <button id="saveAnnBtn">저장</button>
+        <input id="annText" type="text" placeholder="annotation text" />
+        <button id="saveAnnBtn">Save</button>
       </div>
       <ul id="annList"></ul>
     </section>
@@ -32,6 +50,7 @@
   </main>
 
   <script>window.__SESSION_ID__ = "{{ session_id }}";</script>
+  <script src="/static/ui-prefs.js"></script>
   <script src="/static/viewer.js"></script>
 </body>
 </html>

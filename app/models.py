@@ -35,6 +35,11 @@ class Session(Base):
         back_populates="session",
         cascade="all, delete-orphan",
     )
+    jobs: Mapped[list["ProcessingJob"]] = relationship(
+        "ProcessingJob",
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
 
 
 class SourceImage(Base):
@@ -61,3 +66,18 @@ class Annotation(Base):
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
 
     session: Mapped[Session] = relationship("Session", back_populates="annotations")
+
+
+class ProcessingJob(Base):
+    __tablename__ = "processing_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(String(36), ForeignKey("sessions.id", ondelete="CASCADE"), index=True)
+    mode: Mapped[str] = mapped_column(String(20), default="scans")
+    status: Mapped[str] = mapped_column(String(20), default="queued")
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
+    started_at: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)
+
+    session: Mapped[Session] = relationship("Session", back_populates="jobs")

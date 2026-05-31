@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..models import Session as SessionModel
 from .deepzoom import generate_dzi
-from .stitching import save_stitched_image, stitch_images
+from .stitching import save_stitched_variants, stitch_images
 from .storage import dzi_dir, output_dir
 
 
@@ -26,11 +26,18 @@ def run_pipeline(db: Session, session: SessionModel, mode: str = "scans") -> Ses
             db.refresh(session)
             return session
 
-        stitched_path = output_dir(session.id) / "stitched.jpg"
-        width, height = save_stitched_image(stitched, stitched_path)
+        output_base = output_dir(session.id)
+        raw_stitched_path = output_base / "stitched_raw.png"
+        optimized_stitched_path = output_base / "stitched_optimized.jpg"
+        width, height = save_stitched_variants(
+            stitched,
+            raw_output_path=raw_stitched_path,
+            optimized_output_path=optimized_stitched_path,
+            optimized_jpeg_quality=settings.optimized_jpeg_quality,
+        )
 
         descriptor_path, dzi_width, dzi_height = generate_dzi(
-            stitched_path,
+            raw_stitched_path,
             dzi_dir(session.id),
             tile_size=settings.tile_size,
             overlap=settings.tile_overlap,
@@ -38,7 +45,8 @@ def run_pipeline(db: Session, session: SessionModel, mode: str = "scans") -> Ses
         )
 
         session.status = "ready"
-        session.stitched_image_path = str(stitched_path)
+        # Keep the raw path as canonical stitched output path.
+        session.stitched_image_path = str(raw_stitched_path)
         session.dzi_descriptor_path = str(descriptor_path)
         session.width = dzi_width if dzi_width else width
         session.height = dzi_height if dzi_height else height
