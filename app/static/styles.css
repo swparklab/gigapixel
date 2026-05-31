@@ -1,0 +1,131 @@
+:root {
+  --bg: #f4f7fb;
+  --panel: #ffffff;
+  --text: #0b1f3a;
+  --muted: #5e6d82;
+  --line: #d8e2ee;
+  --accent: #0a66c2;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Noto Sans KR", "Pretendard", sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 10% 10%, #d6e8ff 0%, rgba(214, 232, 255, 0) 35%),
+    radial-gradient(circle at 90% 90%, #fce9c8 0%, rgba(252, 233, 200, 0) 40%),
+    var(--bg);
+}
+
+.container {
+  max-width: 860px;
+  margin: 36px auto;
+  padding: 24px;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px;
+  box-shadow: 0 10px 24px rgba(11, 31, 58, 0.08);
+}
+
+label {
+  display: block;
+  margin-top: 12px;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+input,
+select,
+button {
+  width: 100%;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid #cbd8e8;
+  font-size: 14px;
+}
+
+button {
+  margin-top: 14px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+button:hover {
+  filter: brightness(1.04);
+}
+
+.viewer-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  background: #fff;
+  border-right: 1px solid var(--line);
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.viewer-panel {
+  background: #111;
+  min-height: 100vh;
+}
+
+.viewer {
+  width: 100%;
+  height: 100vh;
+}
+
+.annotation-form {
+  display: flex;
+  gap: 8px;
+}
+
+.annotation-form input {
+  flex: 1;
+}
+
+.annotation-form button {
+  width: 90px;
+  margin-top: 0;
+}
+
+#annList {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+}
+
+#annList li {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px;
+  margin-bottom: 8px;
+  background: #fdfefe;
+}
+
+@media (max-width: 900px) {
+  .viewer-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .viewer {
+    height: 70vh;
+  }
+}

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Session Viewer</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/openseadragon/5.0.1/openseadragon.min.js"></script>
+</head>
+<body>
+  <main class="viewer-layout">
+    <section class="sidebar">
+      <h2 id="title">Session</h2>
+      <p id="meta"></p>
+      <button id="refreshBtn">상태 새로고침</button>
+
+      <hr />
+      <h3>Annotation</h3>
+      <p>뷰어에서 클릭하면 좌표를 담아 입력창이 열립니다.</p>
+      <div class="annotation-form">
+        <input id="annText" type="text" placeholder="주석 내용" />
+        <button id="saveAnnBtn">저장</button>
+      </div>
+      <ul id="annList"></ul>
+    </section>
+
+    <section class="viewer-panel">
+      <div id="openseadragon" class="viewer"></div>
+    </section>
+  </main>
+
+  <script>window.__SESSION_ID__ = "{{ session_id }}";</script>
+  <script src="/static/viewer.js"></script>
+</body>
+</html>

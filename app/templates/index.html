@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gigapixel Heritage Viewer</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>Gigapixel Heritage Viewer</h1>
+    <p>다중 이미지 업로드 → 자동 스티칭 → DZI 생성 → 웹 뷰어까지 한 번에 실행합니다.</p>
+
+    <section class="panel">
+      <label for="sessionName">세션 이름</label>
+      <input id="sessionName" type="text" placeholder="예: Gyeongbokgung 1910 Scan" />
+
+      <label for="files">이미지 파일들 (2장 이상)</label>
+      <input id="files" type="file" multiple accept="image/*" />
+
+      <label for="stitchMode">스티칭 모드</label>
+      <select id="stitchMode">
+        <option value="scans">scans (문서/평면 촬영 권장)</option>
+        <option value="panorama">panorama (풍경 파노라마 권장)</option>
+      </select>
+
+      <button id="startBtn">세션 생성 및 처리 시작</button>
+      <p id="status"></p>
+      <p id="share"></p>
+    </section>
+  </main>
+
+  <script src="/static/index.js"></script>
+</body>
+</html>
