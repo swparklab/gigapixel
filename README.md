@@ -21,6 +21,10 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
+근데 잘 안되면 아래 명령어 써보셈 (컴마다 다른듯)
+py -3 -m pip install -r requirements.txt
+py -3 -m uvicorn app.main:app --reload
+
 3. 접속
 - 메인: http://127.0.0.1:8000/
 - 세션 뷰어: http://127.0.0.1:8000/viewer/{session_id}
