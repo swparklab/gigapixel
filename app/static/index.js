@@ -1,9 +1,22 @@
 const statusEl = document.getElementById("status");
 const shareEl = document.getElementById("share");
 const startBtn = document.getElementById("startBtn");
+const nextBtn = document.getElementById("nextBtn");
+const sessionNameEl = document.getElementById("sessionName");
+const filesEl = document.getElementById("files");
+const stitchModeEl = document.getElementById("stitchMode");
 
 function setStatus(text) {
   statusEl.textContent = text;
+}
+
+function prepareNextSession() {
+  sessionNameEl.value = "";
+  filesEl.value = "";
+  setStatus("새 세션 준비가 완료되었습니다.");
+  shareEl.textContent = "";
+  nextBtn.classList.add("hidden");
+  sessionNameEl.focus();
 }
 
 async function createSession(name) {
@@ -61,9 +74,9 @@ async function waitUntilReady(sessionId) {
 }
 
 startBtn.addEventListener("click", async () => {
-  const name = document.getElementById("sessionName").value.trim();
-  const files = document.getElementById("files").files;
-  const mode = document.getElementById("stitchMode").value;
+  const name = sessionNameEl.value.trim();
+  const files = filesEl.files;
+  const mode = stitchModeEl.value;
 
   if (!files || files.length < 2) {
     setStatus("이미지는 최소 2장 이상 선택해야 합니다.");
@@ -71,6 +84,7 @@ startBtn.addEventListener("click", async () => {
   }
 
   startBtn.disabled = true;
+  nextBtn.classList.add("hidden");
   shareEl.textContent = "";
 
   try {
@@ -87,10 +101,13 @@ startBtn.addEventListener("click", async () => {
     const result = await waitUntilReady(session.id);
 
     setStatus("완료되었습니다.");
-    shareEl.innerHTML = `공유 URL: <a href="${result.share_url}">${result.share_url}</a>`;
+    shareEl.innerHTML = `공유 URL: <a href="${result.share_url}">${result.share_url}</a><br/>다운로드: <a href="/api/sessions/${result.id}/download">ZIP 패키지</a>`;
+    nextBtn.classList.remove("hidden");
   } catch (err) {
     setStatus(`오류: ${err.message}`);
   } finally {
     startBtn.disabled = false;
   }
 });
+
+nextBtn.addEventListener("click", prepareNextSession);

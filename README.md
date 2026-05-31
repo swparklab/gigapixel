@@ -9,6 +9,8 @@ PRD 기반 기능(업로드, 자동 스티칭, DZI 생성, 웹 뷰어, 주석, �
 - OpenSeadragon 기반 확대/축소 뷰어
 - Annotation 생성/조회/삭제
 - 세션 공유 URL (`/viewer/{session_id}`)
+- 최종 결과물 ZIP 다운로드 (`/api/sessions/{session_id}/download`)
+- 연속 작업을 위한 다음 세션 빠른 시작 버튼
 
 ## 실행 방법
 1. 의존성 설치

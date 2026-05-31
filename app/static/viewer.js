@@ -4,9 +4,12 @@ const titleEl = document.getElementById("title");
 const annListEl = document.getElementById("annList");
 const annTextEl = document.getElementById("annText");
 const saveAnnBtn = document.getElementById("saveAnnBtn");
+const downloadBtn = document.getElementById("downloadBtn");
+const newSessionBtn = document.getElementById("newSessionBtn");
 
 let viewer;
 let pendingPoint = null;
+let currentSessionStatus = "unknown";
 
 function setMeta(text) {
   metaEl.textContent = text;
@@ -109,8 +112,10 @@ async function addAnnotation() {
 
 async function initViewer() {
   const session = await getSession();
+  currentSessionStatus = session.status;
   titleEl.textContent = session.name;
   setMeta(`상태: ${session.status} | 이미지 ${session.image_count}장`);
+  downloadBtn.disabled = session.status !== "ready";
 
   if (session.status !== "ready") {
     setMeta(`상태: ${session.status} (완료 후 새로고침)`);
@@ -149,6 +154,18 @@ async function initViewer() {
   await loadAnnotations();
 }
 
+function downloadResult() {
+  if (currentSessionStatus !== "ready") {
+    alert("결과물 준비가 끝난 뒤 다운로드할 수 있습니다.");
+    return;
+  }
+  window.location.href = `/api/sessions/${sessionId}/download`;
+}
+
+function goToNewSession() {
+  window.location.href = "/";
+}
+
 async function refreshViewer() {
   if (viewer) {
     viewer.destroy();
@@ -159,6 +176,8 @@ async function refreshViewer() {
 
 document.getElementById("refreshBtn").addEventListener("click", refreshViewer);
 saveAnnBtn.addEventListener("click", addAnnotation);
+downloadBtn.addEventListener("click", downloadResult);
+newSessionBtn.addEventListener("click", goToNewSession);
 
 refreshViewer().catch((err) => {
   setMeta(`오류: ${err.message}`);

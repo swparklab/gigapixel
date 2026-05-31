@@ -1,5 +1,8 @@
 from pathlib import Path
+import json
+import re
 import shutil
+import zipfile
 
 from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -38,6 +41,79 @@ static_dir = Path(__file__).resolve().parent / "static"
 templates_dir = Path(__file__).resolve().parent / "templates"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 templates = Jinja2Templates(directory=str(templates_dir))
+
+
+def _sanitize_filename(value: str) -> str:
+    sanitized = re.sub(r"[^a-zA-Z0-9._-]+", "_", value).strip("._-")
+    return sanitized or "session"
+
+
+def _build_download_package(session: SessionModel, annotations: list[Annotation]) -> tuple[Path, str]:
+    if not session.stitched_image_path or not session.dzi_descriptor_path:
+        raise HTTPException(status_code=404, detail="Output files are not ready")
+
+    stitched_path = Path(session.stitched_image_path)
+    descriptor_path = Path(session.dzi_descriptor_path)
+    if not stitched_path.exists() or not descriptor_path.exists():
+        raise HTTPException(status_code=404, detail="Output files are missing")
+
+    tiles_root = descriptor_path.parent / "image_files"
+    if not tiles_root.exists():
+        raise HTTPException(status_code=404, detail="DZI tiles are missing")
+
+    download_dir = descriptor_path.parent / "downloads"
+    download_dir.mkdir(parents=True, exist_ok=True)
+
+    bundle_name = f"{_sanitize_filename(session.name)}_{session.id}.zip"
+    bundle_path = download_dir / bundle_name
+
+    annotations_payload = [
+        {
+            "id": row.id,
+            "session_id": row.session_id,
+            "x": row.x,
+            "y": row.y,
+            "text": row.text,
+            "created_at": row.created_at.isoformat(),
+        }
+        for row in annotations
+    ]
+
+    manifest_payload = {
+        "session_id": session.id,
+        "name": session.name,
+        "status": session.status,
+        "width": session.width,
+        "height": session.height,
+        "created_at": session.created_at.isoformat(),
+        "updated_at": session.updated_at.isoformat(),
+        "files": {
+            "stitched_image": "stitched/stitched.jpg",
+            "dzi_descriptor": "deepzoom/image.dzi",
+            "dzi_tiles_dir": "deepzoom/image_files/",
+            "annotations": "annotations.json",
+        },
+    }
+
+    with zipfile.ZipFile(bundle_path, mode="w", compression=zipfile.ZIP_DEFLATED) as zipf:
+        zipf.write(stitched_path, arcname="stitched/stitched.jpg")
+        zipf.write(descriptor_path, arcname="deepzoom/image.dzi")
+
+        for tile_path in tiles_root.rglob("*"):
+            if tile_path.is_file():
+                relative = tile_path.relative_to(descriptor_path.parent)
+                zipf.write(tile_path, arcname=f"deepzoom/{relative.as_posix()}")
+
+        zipf.writestr(
+            "annotations.json",
+            json.dumps(annotations_payload, ensure_ascii=False, indent=2),
+        )
+        zipf.writestr(
+            "manifest.json",
+            json.dumps(manifest_payload, ensure_ascii=False, indent=2),
+        )
+
+    return bundle_path, bundle_name
 
 
 def _serialize_session(session: SessionModel, request: Request, db: Session) -> SessionRead:
@@ -205,6 +281,24 @@ def list_annotations(session_id: str, db: Session = Depends(get_db)):
         )
         for row in rows
     ]
+
+
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/download")
+def download_result_package(session_id: str, db: Session = Depends(get_db)):
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.status != "ready":
+        raise HTTPException(status_code=409, detail="Session is not ready yet")
+
+    annotations = db.query(Annotation).filter(Annotation.session_id == session_id).order_by(Annotation.id.asc()).all()
+    bundle_path, bundle_name = _build_download_package(session, annotations)
+
+    return FileResponse(
+        bundle_path,
+        media_type="application/zip",
+        filename=bundle_name,
+    )
 
 
 @app.post(f"{settings.api_prefix}/sessions/{{session_id}}/annotations", response_model=AnnotationRead)

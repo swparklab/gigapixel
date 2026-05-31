@@ -64,6 +64,16 @@ button:hover {
   filter: brightness(1.04);
 }
 
+.secondary {
+  background: #ffffff;
+  color: var(--text);
+  border: 1px solid #cbd8e8;
+}
+
+.hidden {
+  display: none;
+}
+
 .viewer-layout {
   display: grid;
   grid-template-columns: 320px 1fr;
