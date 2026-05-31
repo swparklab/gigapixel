@@ -7,45 +7,89 @@
   <link rel="stylesheet" href="/static/styles.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/openseadragon/5.0.1/openseadragon.min.js"></script>
 </head>
-<body>
-  <main class="viewer-layout">
-    <section class="sidebar">
-      <section class="prefs-bar">
-        <div class="prefs-group">
-          <label id="langLabel" for="langSelect">Language</label>
-          <select id="langSelect">
-            <option value="ko">한국어</option>
-            <option value="en">English</option>
-          </select>
-        </div>
-        <div class="prefs-group">
-          <label id="themeLabel" for="themeSelect">Theme</label>
-          <select id="themeSelect">
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
-        </div>
-      </section>
-
-      <h2 id="sessionHeading">Session</h2>
-      <p id="meta"></p>
-      <button id="refreshBtn">Refresh Status</button>
-      <button id="downloadRawBtn" disabled>Download Raw High-Res</button>
-      <button id="downloadOptimizedBtn" disabled>Download Optimized</button>
-      <button id="newSessionBtn" type="button" class="secondary">New Session</button>
-
-      <hr />
-      <h3 id="annotationHeading">Annotation</h3>
-      <p id="annotationGuide">Click in viewer to pick coordinates, then write your note.</p>
-      <div class="annotation-form">
-        <input id="annText" type="text" placeholder="annotation text" />
-        <button id="saveAnnBtn">Save</button>
+<body class="viewer-body">
+  <main class="viewer-shell">
+    <header class="viewer-topbar">
+      <div class="viewer-brand">
+        <h1 id="viewerTitle">Session Viewer</h1>
+        <p id="viewerSubtitle">High-resolution image explorer with live annotations</p>
       </div>
-      <ul id="annList"></ul>
-    </section>
 
-    <section class="viewer-panel">
-      <div id="openseadragon" class="viewer"></div>
+      <div class="viewer-top-controls">
+        <section class="prefs-bar">
+          <div class="prefs-group">
+            <label id="langLabel" for="langSelect">Language</label>
+            <select id="langSelect">
+              <option value="ko">&#54620;&#44397;&#50612;</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+          <div class="prefs-group">
+            <label id="themeLabel" for="themeSelect">Theme</label>
+            <select id="themeSelect">
+              <option value="light">Light</option>
+              <option value="dark">Night</option>
+            </select>
+          </div>
+        </section>
+
+        <a id="goClassicLink" class="mode-link" href="/">Classic Mode</a>
+        <a id="goWorkflowLink" class="mode-link" href="/workflow">Expert Mode</a>
+      </div>
+    </header>
+
+    <section class="viewer-layout">
+      <aside class="sidebar vwr-sidebar">
+        <section class="panel vwr-card">
+          <h2 id="sessionHeading">Session</h2>
+          <div class="vwr-meta-row">
+            <span id="statusBadge" class="vwr-badge">unknown</span>
+            <span id="imageCountBadge" class="vwr-badge">0 images</span>
+          </div>
+          <p id="meta" class="vwr-meta-text"></p>
+          <div class="vwr-button-grid">
+            <button id="refreshBtn">Refresh Status</button>
+            <button id="newSessionBtn" type="button" class="secondary">New Session</button>
+          </div>
+        </section>
+
+        <section class="panel vwr-card">
+          <h3 id="downloadHeading">Downloads</h3>
+          <div class="vwr-download-stack">
+            <button id="downloadRawBtn" disabled>Download Raw High-Res</button>
+            <button id="downloadOptimizedBtn" disabled>Download Optimized</button>
+          </div>
+        </section>
+
+        <section class="panel vwr-card">
+          <h3 id="annotationHeading">Annotation</h3>
+          <p id="annotationGuide">Click in viewer to pick coordinates, then write your note.</p>
+          <p id="pendingPoint" class="vwr-point">No point selected</p>
+          <div class="annotation-form">
+            <input id="annText" type="text" placeholder="annotation text" />
+            <button id="saveAnnBtn">Save</button>
+          </div>
+        </section>
+
+        <section class="panel vwr-card vwr-card-grow">
+          <div class="vwr-list-head">
+            <h3 id="annotationListHeading">Annotation List</h3>
+            <button id="reloadAnnBtn" type="button" class="secondary vwr-mini-btn">Reload</button>
+          </div>
+          <ul id="annList"></ul>
+        </section>
+      </aside>
+
+      <section class="viewer-panel vwr-viewer-panel">
+        <div class="vwr-toolbar">
+          <button id="zoomOutBtn" type="button">-</button>
+          <button id="zoomInBtn" type="button">+</button>
+          <button id="homeViewBtn" type="button">Fit</button>
+          <button id="fullPageBtn" type="button">Fullscreen</button>
+          <span id="viewerTip" class="vwr-toolbar-tip">Mouse wheel zoom, drag to pan, click to pick point</span>
+        </div>
+        <div id="openseadragon" class="viewer"></div>
+      </section>
     </section>
   </main>
 

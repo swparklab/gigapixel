@@ -11,59 +11,118 @@
   <header class="wf-topbar">
     <div class="wf-brand">
       <h1 id="brandTitle">Gigapixel Node Studio</h1>
-      <p id="brandSubtitle">Local Web Agent Workflow</p>
+      <p id="brandSubtitle">Agent Workflow Console</p>
     </div>
-    <div class="wf-actions">
+
+    <div class="wf-top-controls">
+      <div class="wf-pref-group">
+        <label id="roleLabel" for="roleSelect">Role</label>
+        <select id="roleSelect" class="wf-select">
+          <option value="observer">Observer</option>
+          <option value="operator">Operator</option>
+          <option value="builder">Builder</option>
+        </select>
+      </div>
+
       <div class="wf-pref-group">
         <label id="langLabel" for="langSelect">Language</label>
         <select id="langSelect" class="wf-select">
-          <option value="ko">한국어</option>
+          <option value="ko">&#54620;&#44397;&#50612;</option>
           <option value="en">English</option>
         </select>
       </div>
+
       <div class="wf-pref-group">
         <label id="themeLabel" for="themeSelect">Theme</label>
         <select id="themeSelect" class="wf-select">
           <option value="light">Light</option>
-          <option value="dark">Dark</option>
+          <option value="dark">Night</option>
         </select>
       </div>
+
       <a id="classicLink" class="wf-link" href="/classic">Classic UI</a>
-      <button id="seedGraphBtn" type="button">Create Seed Graph</button>
-      <button id="runGraphBtn" type="button">Run Graph</button>
     </div>
   </header>
 
-  <main class="wf-layout">
-    <aside class="wf-sidebar">
+  <main class="wf-shell">
+    <aside class="wf-leftdock">
       <section class="wf-panel">
-        <h2 id="uploadPanelTitle">Upload Batch</h2>
-        <input id="nodeFiles" type="file" multiple accept="image/*" />
-        <button id="uploadBatchBtn" type="button">Upload Batch</button>
-        <select id="uploadSelect"></select>
+        <div class="wf-panel-head">
+          <h2 id="libraryPanelTitle">Node Palette</h2>
+          <span id="libraryCountBadge" class="wf-badge">0</span>
+        </div>
+        <input id="librarySearchInput" class="wf-input" type="text" placeholder="Search nodes" />
+        <select id="libraryCategorySelect" class="wf-select">
+          <option value="all">All Categories</option>
+        </select>
+        <ul id="libraryList" class="wf-library-list"></ul>
       </section>
 
       <section class="wf-panel">
-        <h2 id="libraryPanelTitle">Function Library</h2>
-        <ul id="libraryList"></ul>
+        <h2 id="uploadPanelTitle">Input Batches</h2>
+        <input id="nodeFiles" class="wf-input" type="file" multiple accept="image/*" />
+        <div class="wf-inline-actions">
+          <button id="uploadBatchBtn" type="button">Upload Batch</button>
+          <button id="applyUploadBtn" type="button">Apply To Upload Nodes</button>
+        </div>
+        <label id="uploadSelectLabel" class="wf-label" for="uploadSelect">Available Batches</label>
+        <select id="uploadSelect" class="wf-select"></select>
+        <p id="uploadHint" class="wf-hint">Select a batch to route files into upload nodes.</p>
       </section>
 
       <section class="wf-panel">
-        <h2 id="statusPanelTitle">Status</h2>
-        <p id="socketStatus">connecting...</p>
-        <div id="runSummary"></div>
-      </section>
-
-      <section class="wf-panel">
-        <h2 id="eventsPanelTitle">Events</h2>
-        <pre id="eventLog"></pre>
+        <h2 id="quickPanelTitle">Quick Actions</h2>
+        <div class="wf-inline-actions">
+          <button id="seedGraphBtn" type="button">Seed Default Graph</button>
+          <button id="resetViewBtn" type="button">Reset View</button>
+        </div>
+        <p id="shortcutHint" class="wf-hint">Shortcuts: Ctrl/Cmd+Enter Run, Ctrl/Cmd+K Search, F Fit</p>
       </section>
     </aside>
 
-    <section class="wf-canvas-wrap">
-      <canvas id="graphCanvas"></canvas>
+    <section class="wf-center">
+      <div class="wf-canvas-toolbar">
+        <span id="socketStatusBadge" class="wf-status-pill wf-status-connecting">connecting...</span>
+        <span id="selectedNodeBadge" class="wf-status-pill">Selected: none</span>
+        <span id="zoomBadge" class="wf-status-pill">Zoom: 100%</span>
+        <div class="wf-toolbar-actions">
+          <button id="zoomOutBtn" type="button">-</button>
+          <button id="zoomInBtn" type="button">+</button>
+          <button id="zoomFitBtn" type="button">Fit</button>
+          <button id="centerNodeBtn" type="button">Center Node</button>
+        </div>
+      </div>
+      <section class="wf-canvas-wrap">
+        <canvas id="graphCanvas"></canvas>
+      </section>
     </section>
+
+    <aside class="wf-rightdock">
+      <section class="wf-panel">
+        <h2 id="runPanelTitle">Run Control</h2>
+        <p id="permissionHint" class="wf-hint"></p>
+        <div class="wf-inline-actions">
+          <button id="runGraphBtn" class="wf-primary" type="button">Run Graph</button>
+          <button id="clearLogBtn" type="button">Clear Log</button>
+        </div>
+        <div id="runSummary" class="wf-summary"></div>
+        <div id="downloadLinks" class="wf-summary"></div>
+      </section>
+
+      <section class="wf-panel">
+        <h2 id="inspectorPanelTitle">Node Inspector</h2>
+        <div id="inspectorEmpty" class="wf-hint">Select a node to inspect details.</div>
+        <dl id="nodeInspector" class="wf-inspector"></dl>
+      </section>
+
+      <section class="wf-panel wf-panel-grow">
+        <h2 id="eventsPanelTitle">Agent Event Stream</h2>
+        <pre id="eventLog"></pre>
+      </section>
+    </aside>
   </main>
+
+  <div id="toastStack" class="wf-toast-stack" aria-live="polite"></div>
 
   <script src="https://unpkg.com/litegraph.js@0.7.18/build/litegraph.js"></script>
   <script src="/static/ui-prefs.js"></script>

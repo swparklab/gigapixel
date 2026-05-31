@@ -88,7 +88,8 @@ def _serialize_session(session: SessionModel, request: Request, db: Session) -> 
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
-    return templates.TemplateResponse("workflow.html", {"request": request})
+    # Default landing mode is classic UI.
+    return templates.TemplateResponse("index.html", {"request": request})
 
 
 @app.get("/classic", response_class=HTMLResponse)

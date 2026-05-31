@@ -23,7 +23,7 @@ let lastResult = null;
 const i18n = {
   en: {
     pageTitle: "Gigapixel Heritage Viewer",
-    workflowLink: "Open Node Workflow",
+    expertMode: "Expert Mode",
     pageSubtitle: "Upload multiple images and run stitching, DZI generation, and viewer sharing in one flow.",
     sessionName: "Session Name",
     sessionPlaceholder: "e.g. Gyeongbokgung 1910 Scan",
@@ -57,12 +57,12 @@ const i18n = {
   },
   ko: {
     pageTitle: "기가픽셀 헤리티지 뷰어",
-    workflowLink: "노드 워크플로우 열기",
-    pageSubtitle: "다중 이미지를 업로드하고 스티칭, DZI 생성, 뷰어 공유까지 한 번에 실행합니다.",
+    expertMode: "전문가 모드",
+    pageSubtitle: "여러 이미지를 업로드하고 스티칭, DZI 생성, 뷰어 공유까지 한 번에 실행합니다.",
     sessionName: "세션 이름",
     sessionPlaceholder: "예: 경복궁 1910 스캔",
     filesLabel: "이미지 파일 (최소 2장)",
-    stitchMode: "스티칭 모드",
+    stitchMode: "스티치 모드",
     scansLabel: "scans (문서/평면 스캔 권장)",
     panoramaLabel: "panorama (장면 파노라마 권장)",
     startBtn: "세션 생성 및 처리 시작",
@@ -75,13 +75,13 @@ const i18n = {
     createFailed: "세션 생성 실패: {status}",
     uploadFailed: "업로드 실패: {message}",
     processFailed: "처리 시작 실패: {message}",
-    statusQueuedHint: " (에이전트 창에서 `py -3 -m app.agent` 실행 상태를 확인하세요.)",
+    statusQueuedHint: " (에이전트 창에서 `py -3 -m app.agent` 실행 상태를 확인하세요)",
     statusText: "상태: {status}{hint}",
     processingFailed: "처리 실패",
     needTwoImages: "이미지를 최소 2장 이상 선택하세요.",
     step1: "1/4 세션 생성 중...",
     step2: "2/4 이미지 업로드 중...",
-    step3: "3/4 스티칭 파이프라인 시작...",
+    step3: "3/4 스티치 파이프라인 시작...",
     step4: "4/4 완료 대기 중...",
     completed: "완료되었습니다.",
     shareUrl: "공유 URL",
@@ -120,7 +120,7 @@ function renderShare(result) {
 function applyTranslations() {
   document.title = t("pageTitle");
   pageTitleEl.textContent = t("pageTitle");
-  openWorkflowLinkEl.textContent = t("workflowLink");
+  openWorkflowLinkEl.textContent = t("expertMode");
   pageSubtitleEl.textContent = t("pageSubtitle");
   sessionNameLabelEl.textContent = t("sessionName");
   sessionNameEl.placeholder = t("sessionPlaceholder");
