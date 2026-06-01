@@ -1,3 +1,14 @@
 data/node_uploads/
 data/sessions/
 data/sessions/
+data/sessions/
+*.png
+*.jpg
+*.jpeg
+*.tif
+*.tiff
+*.psd
+*.zip
+*.mp4
+*.mov
+__pycache__/data/sessions/
