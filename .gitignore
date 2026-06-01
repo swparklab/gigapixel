@@ -12,3 +12,4 @@ data/sessions/
 *.mp4
 *.mov
 __pycache__/data/sessions/
+data/sessions/
