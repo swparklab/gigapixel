@@ -1,4 +1,4 @@
-# Gigapixel Heritage Viewer
+﻿# Gigapixel Heritage Viewer
 
 Local web app for gigapixel heritage image stitching, Deep Zoom tiling, annotation, and downloadable output packages.
 
@@ -28,6 +28,10 @@ py -3 -m uvicorn app.main:app --reload
 ```bash
 py -3 -m app.agent
 ```
+git status
+git add .
+git commit -m "Initial commit"
+git push -u origin main
 
 ## URLs
 - Node UI: `http://127.0.0.1:8000/`
