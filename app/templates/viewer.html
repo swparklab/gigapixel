@@ -43,10 +43,10 @@
         <section class="panel vwr-card">
           <h2 id="sessionHeading">Session</h2>
           <div class="vwr-meta-row">
-            <span id="statusBadge" class="vwr-badge">unknown</span>
+            <span id="statusBadge" class="vwr-badge" role="status" aria-live="polite">unknown</span>
             <span id="imageCountBadge" class="vwr-badge">0 images</span>
           </div>
-          <p id="meta" class="vwr-meta-text"></p>
+          <p id="meta" class="vwr-meta-text" aria-live="polite"></p>
           <div class="vwr-button-grid">
             <button id="refreshBtn">Refresh Status</button>
             <button id="newSessionBtn" type="button" class="secondary">New Session</button>
@@ -64,9 +64,9 @@
         <section class="panel vwr-card">
           <h3 id="annotationHeading">Annotation</h3>
           <p id="annotationGuide">Click in viewer to pick coordinates, then write your note.</p>
-          <p id="pendingPoint" class="vwr-point">No point selected</p>
+          <p id="pendingPoint" class="vwr-point" role="status" aria-live="polite">No point selected</p>
           <div class="annotation-form">
-            <input id="annText" type="text" placeholder="annotation text" />
+            <input id="annText" type="text" placeholder="annotation text" autocomplete="off" aria-describedby="pendingPoint" />
             <button id="saveAnnBtn">Save</button>
           </div>
         </section>
@@ -76,7 +76,7 @@
             <h3 id="annotationListHeading">Annotation List</h3>
             <button id="reloadAnnBtn" type="button" class="secondary vwr-mini-btn">Reload</button>
           </div>
-          <ul id="annList"></ul>
+          <ul id="annList" aria-live="polite"></ul>
         </section>
       </aside>
 

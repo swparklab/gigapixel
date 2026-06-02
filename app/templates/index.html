@@ -34,7 +34,7 @@
 
     <section class="panel">
       <label id="sessionNameLabel" for="sessionName">Session Name</label>
-      <input id="sessionName" type="text" placeholder="e.g. Gyeongbokgung 1910 Scan" />
+      <input id="sessionName" type="text" placeholder="e.g. Gyeongbokgung 1910 Scan" autocomplete="off" />
 
       <label id="filesLabel" for="files">Image Files (at least 2)</label>
       <input id="files" type="file" multiple accept="image/*" />
@@ -45,10 +45,10 @@
         <option id="stitchModePanorama" value="panorama">panorama (recommended for scene panoramas)</option>
       </select>
 
-      <button id="startBtn">Create Session and Start Processing</button>
+      <button id="startBtn" aria-describedby="status">Create Session and Start Processing</button>
       <button id="nextBtn" type="button" class="secondary hidden">Prepare Next Output</button>
-      <p id="status"></p>
-      <p id="share"></p>
+      <p id="status" role="status" aria-live="polite"></p>
+      <p id="share" aria-live="polite"></p>
     </section>
   </main>
 

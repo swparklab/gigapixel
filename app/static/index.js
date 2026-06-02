@@ -32,6 +32,7 @@ const i18n = {
     scansLabel: "scans (recommended for flat/document scans)",
     panoramaLabel: "panorama (recommended for scene panoramas)",
     startBtn: "Create Session and Start Processing",
+    runningBtn: "Processing...",
     nextBtn: "Prepare Next Output",
     langLabel: "Language",
     themeLabel: "Theme",
@@ -66,6 +67,7 @@ const i18n = {
     scansLabel: "scans (문서/평면 스캔 권장)",
     panoramaLabel: "panorama (장면 파노라마 권장)",
     startBtn: "세션 생성 및 처리 시작",
+    runningBtn: "처리 중...",
     nextBtn: "다음 결과 준비",
     langLabel: "언어",
     themeLabel: "테마",
@@ -117,6 +119,11 @@ function renderShare(result) {
   shareEl.innerHTML = `${t("shareUrl")}: <a href="${result.share_url}">${result.share_url}</a><br/>Download: <a href="/api/sessions/${result.id}/download/raw">${t("downloadRaw")}</a> | <a href="/api/sessions/${result.id}/download/optimized">${t("downloadOptimized")}</a>`;
 }
 
+function renderStartButton() {
+  const isBusy = startBtn.dataset.busy === "true";
+  startBtn.textContent = isBusy ? t("runningBtn") : t("startBtn");
+}
+
 function applyTranslations() {
   document.title = t("pageTitle");
   pageTitleEl.textContent = t("pageTitle");
@@ -128,7 +135,7 @@ function applyTranslations() {
   stitchModeLabelEl.textContent = t("stitchMode");
   stitchModeScansEl.textContent = t("scansLabel");
   stitchModePanoramaEl.textContent = t("panoramaLabel");
-  startBtn.textContent = t("startBtn");
+  renderStartButton();
   nextBtn.textContent = t("nextBtn");
   langLabelEl.textContent = t("langLabel");
   themeLabelEl.textContent = t("themeLabel");
@@ -144,14 +151,26 @@ function applyTranslations() {
   renderShare(lastResult);
 }
 
-function setStatus(text) {
+function setStatus(text, state = "info") {
   statusEl.textContent = text;
+  if (text) {
+    statusEl.dataset.state = state;
+  } else {
+    delete statusEl.dataset.state;
+  }
+}
+
+function setBusy(isBusy) {
+  startBtn.disabled = isBusy;
+  startBtn.dataset.busy = isBusy ? "true" : "false";
+  startBtn.setAttribute("aria-busy", isBusy ? "true" : "false");
+  renderStartButton();
 }
 
 function prepareNextSession() {
   sessionNameEl.value = "";
   filesEl.value = "";
-  setStatus(t("nextReady"));
+  setStatus(t("nextReady"), "success");
   lastResult = null;
   renderShare(lastResult);
   nextBtn.classList.add("hidden");
@@ -226,11 +245,11 @@ startBtn.addEventListener("click", async () => {
   const mode = stitchModeEl.value;
 
   if (!files || files.length < 2) {
-    setStatus(t("needTwoImages"));
+    setStatus(t("needTwoImages"), "error");
     return;
   }
 
-  startBtn.disabled = true;
+  setBusy(true);
   nextBtn.classList.add("hidden");
   lastResult = null;
   renderShare(lastResult);
@@ -248,14 +267,14 @@ startBtn.addEventListener("click", async () => {
     setStatus(t("step4"));
     const result = await waitUntilReady(session.id);
 
-    setStatus(t("completed"));
+    setStatus(t("completed"), "success");
     lastResult = result;
     renderShare(lastResult);
     nextBtn.classList.remove("hidden");
   } catch (err) {
-    setStatus(tf("error", { message: err.message }));
+    setStatus(tf("error", { message: err.message }), "error");
   } finally {
-    startBtn.disabled = false;
+    setBusy(false);
   }
 });
 

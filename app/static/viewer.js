@@ -81,6 +81,7 @@ const i18n = {
     annotationEmpty: "No annotations yet.",
     deleteLabel: "Delete",
     clickFirstAlert: "Click a location in the viewer first.",
+    annotationTextRequired: "Enter annotation text.",
     annotationSaveFailed: "Failed to save annotation.",
     downloadNotReady: "Download is available only when the session is ready.",
     refreshError: "Error: {message}",
@@ -126,6 +127,7 @@ const i18n = {
     annotationEmpty: "아직 주석이 없습니다.",
     deleteLabel: "삭제",
     clickFirstAlert: "먼저 뷰어에서 위치를 클릭하세요.",
+    annotationTextRequired: "주석 내용을 입력하세요.",
     annotationSaveFailed: "주석 저장 실패",
     downloadNotReady: "세션이 준비된 뒤에만 다운로드할 수 있습니다.",
     refreshError: "오류: {message}",
@@ -177,7 +179,10 @@ function updatePendingPointText() {
 }
 
 function updateSaveButtonState() {
-  saveAnnBtn.disabled = !pendingPoint || !annTextEl.value.trim();
+  const needsPoint = !pendingPoint;
+  const needsText = !annTextEl.value.trim();
+  saveAnnBtn.disabled = needsPoint || needsText;
+  saveAnnBtn.title = needsPoint ? t("clickFirstAlert") : needsText ? t("annotationTextRequired") : "";
 }
 
 function updateMetaText() {
@@ -196,6 +201,9 @@ function updateDownloadState() {
   const isReady = currentSessionStatus === "ready";
   downloadRawBtn.disabled = !isReady;
   downloadOptimizedBtn.disabled = !isReady;
+  const disabledTitle = isReady ? "" : t("downloadNotReady");
+  downloadRawBtn.title = disabledTitle;
+  downloadOptimizedBtn.title = disabledTitle;
 }
 
 function updateAnnotationHeading() {
@@ -240,6 +248,7 @@ function applyTranslations() {
   if (currentSession) {
     updateMetaText();
   }
+  updateDownloadState();
   updatePendingPointText();
   if (imageCountBadgeEl) {
     const count = currentSession ? currentSession.image_count : 0;

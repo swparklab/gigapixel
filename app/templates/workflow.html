@@ -51,7 +51,9 @@
           <h2 id="libraryPanelTitle">Node Palette</h2>
           <span id="libraryCountBadge" class="wf-badge">0</span>
         </div>
-        <input id="librarySearchInput" class="wf-input" type="text" placeholder="Search nodes" />
+        <label id="librarySearchLabel" class="wf-label" for="librarySearchInput">Node Search</label>
+        <input id="librarySearchInput" class="wf-input" type="text" placeholder="Search nodes" autocomplete="off" />
+        <label id="libraryCategoryLabel" class="wf-label" for="libraryCategorySelect">Category Filter</label>
         <select id="libraryCategorySelect" class="wf-select">
           <option value="all">All Categories</option>
         </select>
@@ -82,7 +84,7 @@
 
     <section class="wf-center">
       <div class="wf-canvas-toolbar">
-        <span id="socketStatusBadge" class="wf-status-pill wf-status-connecting">connecting...</span>
+        <span id="socketStatusBadge" class="wf-status-pill wf-status-connecting" role="status" aria-live="polite">connecting...</span>
         <span id="selectedNodeBadge" class="wf-status-pill">Selected: none</span>
         <span id="zoomBadge" class="wf-status-pill">Zoom: 100%</span>
         <div class="wf-toolbar-actions">
@@ -105,8 +107,8 @@
           <button id="runGraphBtn" class="wf-primary" type="button">Run Graph</button>
           <button id="clearLogBtn" type="button">Clear Log</button>
         </div>
-        <div id="runSummary" class="wf-summary"></div>
-        <div id="downloadLinks" class="wf-summary"></div>
+        <div id="runSummary" class="wf-summary" role="status" aria-live="polite"></div>
+        <div id="downloadLinks" class="wf-summary" aria-live="polite"></div>
       </section>
 
       <section class="wf-panel">
@@ -117,7 +119,7 @@
 
       <section class="wf-panel wf-panel-grow">
         <h2 id="eventsPanelTitle">Agent Event Stream</h2>
-        <pre id="eventLog"></pre>
+        <pre id="eventLog" role="log" aria-live="polite" aria-label="Agent event stream"></pre>
       </section>
     </aside>
   </main>

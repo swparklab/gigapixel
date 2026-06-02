@@ -52,7 +52,9 @@ const el = {
 
   libraryPanelTitle: document.getElementById("libraryPanelTitle"),
   libraryCountBadge: document.getElementById("libraryCountBadge"),
+  librarySearchLabel: document.getElementById("librarySearchLabel"),
   librarySearchInput: document.getElementById("librarySearchInput"),
+  libraryCategoryLabel: document.getElementById("libraryCategoryLabel"),
   libraryCategorySelect: document.getElementById("libraryCategorySelect"),
   libraryList: document.getElementById("libraryList"),
 
@@ -109,7 +111,9 @@ const i18n = {
     darkMode: "Night",
     classicUi: "Classic UI",
     libraryPanelTitle: "Node Palette",
+    librarySearchLabel: "Node Search",
     librarySearchPlaceholder: "Search nodes by name/type",
+    libraryCategoryLabel: "Category Filter",
     libraryAllCategories: "All Categories",
     libraryEmpty: "No nodes match current filter.",
     addNode: "Add Node",
@@ -198,7 +202,9 @@ const i18n = {
     darkMode: "밤 모드",
     classicUi: "클래식 UI",
     libraryPanelTitle: "노드 팔레트",
+    librarySearchLabel: "노드 검색",
     librarySearchPlaceholder: "노드 이름/타입 검색",
+    libraryCategoryLabel: "카테고리 필터",
     libraryAllCategories: "모든 카테고리",
     libraryEmpty: "필터 조건에 맞는 노드가 없습니다.",
     addNode: "노드 추가",
@@ -507,7 +513,9 @@ function applyTranslations() {
   }
 
   if (el.libraryPanelTitle) el.libraryPanelTitle.textContent = t("libraryPanelTitle");
+  if (el.librarySearchLabel) el.librarySearchLabel.textContent = t("librarySearchLabel");
   if (el.librarySearchInput) el.librarySearchInput.placeholder = t("librarySearchPlaceholder");
+  if (el.libraryCategoryLabel) el.libraryCategoryLabel.textContent = t("libraryCategoryLabel");
   if (el.uploadPanelTitle) el.uploadPanelTitle.textContent = t("uploadPanelTitle");
   if (el.uploadBatchBtn) el.uploadBatchBtn.textContent = t("uploadBatchBtn");
   if (el.applyUploadBtn) el.applyUploadBtn.textContent = t("applyUploadBtn");
