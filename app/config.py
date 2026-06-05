@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     tile_overlap: int = 1
     optimized_jpeg_quality: int = 85
     agent_poll_interval_seconds: float = 1.0
+    stitch_registration_megapix: float = 2.0
+    stitch_seam_megapix: float = 0.8
+    stitch_compositing_megapix: float = -1.0
+    stitch_confidence_threshold: float = 0.65
 
     model_config = SettingsConfigDict(
         env_file=".env",
