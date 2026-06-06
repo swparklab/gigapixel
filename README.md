@@ -1,4 +1,4 @@
-# Gigapixel Heritage Viewer
+﻿# Gigapixel Heritage Viewer
 
 Research-oriented local web application for high-resolution cultural heritage image stitching, BigTIFF export, Deep Zoom tiling, web-based inspection, annotation, and node-style workflow control.
 
@@ -359,9 +359,5 @@ No open-source license file is currently present. Add a `LICENSE` file before pu
 
 ## Research Acknowledgement
 
-본고는 문화체육관광부 및 한국콘텐츠진흥원(KOCCA)의 2024년도 문화체육관광연구개발사업으로 수행되었음.
-
-과제명: 복합소재 문화유산 고품질 복원을 위한 디지털 문화유산 획득용 광학기술 및 공유 플랫폼 기술 개발
-
-과제번호: RS-2024-00442410
+본고는 문화체육관광부 및 한국콘텐츠진흥원(KOCCA)의 2024년도 문화체육관광연구개발사업으로 수행되었음. 과제명: 복합소재 문화유산 고품질 복원을 위한 디지털 문화유산 획득용 광학기술 및 공유 플랫폼 기술 개발 과제번호: RS-2024-00442410
 
