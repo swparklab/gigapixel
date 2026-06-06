@@ -7,6 +7,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .database import Base
 
 
+def utc_now() -> dt.datetime:
+    return dt.datetime.now(dt.UTC)
+
+
 class Session(Base):
     __tablename__ = "sessions"
 
@@ -18,11 +22,11 @@ class Session(Base):
     dzi_descriptor_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     width: Mapped[int | None] = mapped_column(Integer, nullable=True)
     height: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[dt.datetime] = mapped_column(
-        DateTime,
-        default=dt.datetime.utcnow,
-        onupdate=dt.datetime.utcnow,
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
     )
 
     images: Mapped[list["SourceImage"]] = relationship(
@@ -50,7 +54,7 @@ class SourceImage(Base):
     filename: Mapped[str] = mapped_column(String(500))
     file_path: Mapped[str] = mapped_column(Text)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     session: Mapped[Session] = relationship("Session", back_populates="images")
 
@@ -63,7 +67,7 @@ class Annotation(Base):
     x: Mapped[float] = mapped_column(Float)
     y: Mapped[float] = mapped_column(Float)
     text: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     session: Mapped[Session] = relationship("Session", back_populates="annotations")
 
@@ -76,8 +80,8 @@ class ProcessingJob(Base):
     mode: Mapped[str] = mapped_column(String(20), default="scans")
     status: Mapped[str] = mapped_column(String(20), default="queued")
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
-    started_at: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)
-    finished_at: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    started_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     session: Mapped[Session] = relationship("Session", back_populates="jobs")

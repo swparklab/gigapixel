@@ -1,13 +1,14 @@
 import re
 from pathlib import Path
 
-import cv2
-import numpy as np
 from fastapi import HTTPException
+from PIL import Image, ImageOps
 
 from ..config import settings
 from ..models import Session
 from .storage import output_dir
+
+Image.MAX_IMAGE_PIXELS = None
 
 
 def sanitize_filename(value: str) -> str:
@@ -32,6 +33,8 @@ def resolve_raw_image_path(session: Session) -> Path:
     base = output_dir(session.id)
     candidates.extend(
         [
+            base / "stitched_raw.tif",
+            base / "stitched_raw.tiff",
             base / "stitched_raw.png",
             base / "stitched.png",
             base / "stitched.tif",
@@ -49,29 +52,24 @@ def resolve_raw_image_path(session: Session) -> Path:
 
 
 def _ensure_optimized_from_raw(raw_path: Path, optimized_path: Path) -> None:
-    file_bytes = np.fromfile(str(raw_path), dtype=np.uint8)
-    image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-    if image is None:
-        raise HTTPException(status_code=500, detail="Failed to read raw stitched image")
+    try:
+        with Image.open(raw_path) as source:
+            image = ImageOps.exif_transpose(source)
+            if image.mode not in {"RGB", "L"}:
+                image = image.convert("RGB")
+            elif image.mode == "L":
+                image = image.convert("RGB")
 
-    quality = int(max(1, min(100, settings.optimized_jpeg_quality)))
-    ok, encoded = cv2.imencode(
-        ".jpg",
-        image,
-        [
-            cv2.IMWRITE_JPEG_QUALITY,
-            quality,
-            cv2.IMWRITE_JPEG_PROGRESSIVE,
-            1,
-            cv2.IMWRITE_JPEG_OPTIMIZE,
-            1,
-        ],
-    )
-    if not ok:
-        raise HTTPException(status_code=500, detail="Failed to create optimized stitched image")
-
-    optimized_path.parent.mkdir(parents=True, exist_ok=True)
-    encoded.tofile(str(optimized_path))
+            optimized_path.parent.mkdir(parents=True, exist_ok=True)
+            image.save(
+                optimized_path,
+                format="JPEG",
+                quality=int(max(1, min(100, settings.optimized_jpeg_quality))),
+                progressive=True,
+                optimize=True,
+            )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to read raw stitched image") from exc
 
 
 def resolve_optimized_image_path(session: Session) -> Path:

@@ -2,23 +2,23 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+from PIL import Image
 
 from ..config import settings
+from .feature_matching import disable_opencl, read_image_bgr
+from .stitch_pipeline import run_scans_pipeline
+
+try:
+    import tifffile  # type: ignore
+except Exception:  # pragma: no cover
+    tifffile = None
+
+Image.MAX_IMAGE_PIXELS = None
+
+disable_opencl()
 
 
-def _disable_opencl() -> None:
-    """Keep large stitching jobs on CPU RAM instead of fragile OpenCL buffers."""
-    if hasattr(cv2, "ocl"):
-        try:
-            cv2.ocl.setUseOpenCL(False)
-        except cv2.error:
-            pass
-
-
-_disable_opencl()
-
-
-def _status_to_message(code: int) -> str:
+def _status_to_message(code: int | None) -> str:
     mapping = {
         cv2.Stitcher_OK: "OK",
         1: "ERR_NEED_MORE_IMGS",
@@ -41,28 +41,19 @@ def _is_memory_error(exc: cv2.error) -> bool:
 
 
 def _read_image(path: Path):
-    # Windows Unicode path safe read.
-    file_bytes = np.fromfile(str(path), dtype=np.uint8)
-    image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-    if image is None:
-        raise ValueError(f"Unable to read image: {path.name}")
-    return image
+    return read_image_bgr(path)
 
 
 def _make_stitcher(mode: str, *, registration_mpx: float, seam_mpx: float, confidence: float):
     stitch_mode = cv2.Stitcher_SCANS if mode == "scans" else cv2.Stitcher_PANORAMA
     stitcher = cv2.Stitcher_create(stitch_mode)
 
-    # OpenCV defaults are registration=0.6MP and seam=0.1MP. They are fast, but
-    # too coarse for heritage scans. Use denser estimation and compose at source
-    # resolution so the downloadable raw result stays full fidelity.
+    # Fallback path only. Scans use the modular full-resolution pipeline first.
     stitcher.setRegistrationResol(float(registration_mpx))
     stitcher.setSeamEstimationResol(float(seam_mpx))
     stitcher.setCompositingResol(float(settings.stitch_compositing_megapix))
     stitcher.setPanoConfidenceThresh(float(confidence))
     stitcher.setInterpolationFlags(cv2.INTER_LANCZOS4)
-
-    # Wave correction is useful for handheld panoramas, but it can bend flat scans.
     stitcher.setWaveCorrection(mode != "scans")
     return stitcher
 
@@ -77,11 +68,24 @@ def _stitch_with_profile(read_images: list, mode: str, profile: dict[str, float]
     return stitcher.stitch(read_images)
 
 
+def _format_pipeline_logs(logs: list[str]) -> str:
+    if not logs:
+        return ""
+    return " Last stages: " + " | ".join(logs[-8:])
+
+
 def stitch_images(image_paths: list[Path], mode: str = "scans") -> tuple[bool, str, object | None]:
     if len(image_paths) < 2:
         return False, "At least 2 images are required for stitching.", None
 
-    _disable_opencl()
+    disable_opencl()
+
+    planar_message = ""
+    if mode == "scans" and settings.stitch_planar_enabled:
+        result = run_scans_pipeline(image_paths)
+        planar_message = result.message + _format_pipeline_logs(result.logs)
+        if result.success and result.image is not None:
+            return True, planar_message, result.image
 
     try:
         read_images = [_read_image(path) for path in image_paths]
@@ -103,39 +107,94 @@ def stitch_images(image_paths: list[Path], mode: str = "scans") -> tuple[bool, s
     last_error = None
     for profile_name, profile in (("high-precision", high_precision), ("balanced-retry", balanced_retry)):
         try:
-            _disable_opencl()
+            disable_opencl()
             status, stitched = _stitch_with_profile(read_images, mode, profile)
         except cv2.error as exc:
             last_error = exc
             if _is_memory_error(exc):
                 continue
-            return False, f"Stitching failed ({profile_name}): {exc}", None
+            return False, f"OpenCV fallback failed ({profile_name}): {exc}. {planar_message}", None
 
         last_status = status
         if status == cv2.Stitcher_OK and stitched is not None:
-            return True, f"Stitching completed with {profile_name} profile.", stitched
+            fallback_note = f" Planar attempt: {planar_message}" if planar_message else ""
+            return True, f"Stitching completed with OpenCV fallback {profile_name} profile.{fallback_note}", stitched
 
     if last_error is not None:
         return (
             False,
-            "Stitching failed because OpenCV could not allocate enough memory after disabling OpenCL. "
-            f"Last error: {last_error}",
+            f"{planar_message} OpenCV fallback failed because it could not allocate enough memory after disabling "
+            f"OpenCL. Last error: {last_error}",
             None,
         )
 
-    return False, f"Stitching failed: {_status_to_message(last_status)}", None
+    return False, f"{planar_message} OpenCV fallback failed: {_status_to_message(last_status)}", None
 
 
 def save_stitched_image(stitched, output_path: Path) -> tuple[int, int]:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     ext = output_path.suffix.lower() if output_path.suffix else ".jpg"
-    ok, encoded = cv2.imencode(ext, stitched)
-    if ok:
-        encoded.tofile(str(output_path))
-    if not ok:
-        raise RuntimeError(f"Failed to save stitched image to {output_path}")
+    if ext in {".tif", ".tiff"}:
+        _save_bigtiff(stitched, output_path)
+    else:
+        ok, encoded = cv2.imencode(ext, stitched)
+        if ok:
+            encoded.tofile(str(output_path))
+        if not ok:
+            raise RuntimeError(f"Failed to save stitched image to {output_path}")
     height, width = stitched.shape[:2]
     return width, height
+
+
+def _bgr_to_rgb(stitched):
+    if stitched.ndim == 2:
+        return np.ascontiguousarray(stitched)
+    if stitched.ndim == 3 and stitched.shape[2] == 3:
+        return np.ascontiguousarray(stitched[:, :, ::-1])
+    if stitched.ndim == 3 and stitched.shape[2] == 4:
+        return np.ascontiguousarray(stitched[:, :, [2, 1, 0, 3]])
+    raise RuntimeError(f"Unsupported stitched image shape for BigTIFF: {stitched.shape}")
+
+
+def _tiff_compression():
+    value = str(settings.raw_bigtiff_compression or "none").lower()
+    if value in {"", "none", "raw", "uncompressed"}:
+        return None
+    return value
+
+
+def _save_bigtiff_with_tifffile(rgb, output_path: Path) -> bool:
+    if tifffile is None:
+        return False
+    try:
+        tifffile.imwrite(
+            str(output_path),
+            rgb,
+            bigtiff=True,
+            photometric="rgb" if rgb.ndim == 3 else "minisblack",
+            metadata=None,
+            compression=_tiff_compression(),
+        )
+        return True
+    except Exception:
+        return False
+
+
+def _save_bigtiff_with_pillow(rgb, output_path: Path) -> None:
+    if rgb.ndim == 2:
+        image = Image.fromarray(rgb)
+    else:
+        mode = "RGBA" if rgb.shape[2] == 4 else "RGB"
+        image = Image.fromarray(rgb, mode)
+    compression = "raw" if _tiff_compression() is None else str(settings.raw_bigtiff_compression)
+    image.save(output_path, format="TIFF", big_tiff=True, compression=compression)
+
+
+def _save_bigtiff(stitched, output_path: Path) -> None:
+    rgb = _bgr_to_rgb(stitched)
+    if _save_bigtiff_with_tifffile(rgb, output_path):
+        return
+    _save_bigtiff_with_pillow(rgb, output_path)
 
 
 def save_stitched_variants(
@@ -147,15 +206,8 @@ def save_stitched_variants(
     raw_output_path.parent.mkdir(parents=True, exist_ok=True)
     optimized_output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Raw: lossless, high-resolution output with minimal processing.
-    raw_ok, raw_encoded = cv2.imencode(
-        ".png",
-        stitched,
-        [cv2.IMWRITE_PNG_COMPRESSION, 0],
-    )
-    if not raw_ok:
-        raise RuntimeError(f"Failed to save raw stitched image to {raw_output_path}")
-    raw_encoded.tofile(str(raw_output_path))
+    # Raw: BigTIFF, lossless, high-resolution output with 64-bit offsets.
+    _save_bigtiff(stitched, raw_output_path)
 
     # Optimized: same resolution, smaller size with JPEG compression.
     jpeg_quality = int(max(1, min(100, optimized_jpeg_quality)))

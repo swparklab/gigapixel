@@ -10,6 +10,10 @@ from .models import ProcessingJob, Session as SessionModel
 from .services.tasks import run_pipeline
 
 
+def utc_now() -> dt.datetime:
+    return dt.datetime.now(dt.UTC)
+
+
 def _claim_next_job(db: Session) -> ProcessingJob | None:
     candidate = (
         db.query(ProcessingJob)
@@ -26,7 +30,7 @@ def _claim_next_job(db: Session) -> ProcessingJob | None:
         .update(
             {
                 ProcessingJob.status: "processing",
-                ProcessingJob.started_at: dt.datetime.utcnow(),
+                ProcessingJob.started_at: utc_now(),
                 ProcessingJob.error_message: None,
             },
             synchronize_session=False,
@@ -40,11 +44,12 @@ def _claim_next_job(db: Session) -> ProcessingJob | None:
 
 
 def _process_claimed_job(db: Session, job: ProcessingJob) -> None:
+    started = utc_now()
     session = db.get(SessionModel, job.session_id)
     if not session:
         job.status = "failed"
         job.error_message = f"Session not found: {job.session_id}"
-        job.finished_at = dt.datetime.utcnow()
+        job.finished_at = utc_now()
         db.commit()
         return
 
@@ -54,7 +59,7 @@ def _process_claimed_job(db: Session, job: ProcessingJob) -> None:
         if not job:
             return
 
-        job.finished_at = dt.datetime.utcnow()
+        job.finished_at = utc_now()
         if result.status == "ready":
             job.status = "done"
             job.error_message = None
@@ -62,6 +67,11 @@ def _process_claimed_job(db: Session, job: ProcessingJob) -> None:
             job.status = "failed"
             job.error_message = result.error_message or "Processing failed"
         db.commit()
+        elapsed = (utc_now() - started).total_seconds()
+        print(
+            f"[agent] finished job={job.id} session={job.session_id} "
+            f"job_status={job.status} session_status={result.status} elapsed={elapsed:.1f}s"
+        )
     except Exception as exc:
         db.rollback()
         session = db.get(SessionModel, job.session_id)
@@ -73,8 +83,10 @@ def _process_claimed_job(db: Session, job: ProcessingJob) -> None:
         if job:
             job.status = "failed"
             job.error_message = str(exc)
-            job.finished_at = dt.datetime.utcnow()
+            job.finished_at = utc_now()
         db.commit()
+        elapsed = (utc_now() - started).total_seconds()
+        print(f"[agent] failed job={job.id} session={job.session_id} elapsed={elapsed:.1f}s error={exc}")
 
 
 def run_once() -> bool:

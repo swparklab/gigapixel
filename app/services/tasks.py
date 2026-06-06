@@ -9,25 +9,26 @@ from .stitching import save_stitched_variants, stitch_images
 from .storage import dzi_dir, output_dir
 
 
-def run_pipeline(db: Session, session: SessionModel, mode: str = "scans") -> SessionModel:
-    session.status = "processing"
-    session.error_message = None
+def _set_session_status(db: Session, session: SessionModel, status: str, error_message: str | None = None) -> None:
+    session.status = status
+    session.error_message = error_message
     db.commit()
     db.refresh(session)
+
+
+def run_pipeline(db: Session, session: SessionModel, mode: str = "scans") -> SessionModel:
+    _set_session_status(db, session, "processing")
 
     image_paths = [Path(img.file_path) for img in sorted(session.images, key=lambda x: x.sort_order)]
 
     try:
         success, message, stitched = stitch_images(image_paths, mode=mode)
         if not success or stitched is None:
-            session.status = "failed"
-            session.error_message = message
-            db.commit()
-            db.refresh(session)
+            _set_session_status(db, session, "failed", message)
             return session
 
         output_base = output_dir(session.id)
-        raw_stitched_path = output_base / "stitched_raw.png"
+        raw_stitched_path = output_base / "stitched_raw.tif"
         optimized_stitched_path = output_base / "stitched_optimized.jpg"
         width, height = save_stitched_variants(
             stitched,

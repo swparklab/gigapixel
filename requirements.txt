@@ -7,6 +7,7 @@ python-multipart>=0.0.9
 opencv-python>=4.9.0
 numpy>=1.26.4
 pillow>=10.3.0
+tifffile>=2024.8.30
 jinja2>=3.1.4
 # Optional (faster DZI generation when libvips is available):
 # pyvips>=2.2.2
