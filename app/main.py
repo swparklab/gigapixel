@@ -17,6 +17,8 @@ from .models import Annotation, Session as SessionModel, SourceImage
 from .schemas import (
     AnnotationCreate,
     AnnotationRead,
+    AcquisitionPlanRead,
+    AcquisitionPlanRequest,
     ProcessRequest,
     ProcessResponse,
     SessionCreate,
@@ -28,6 +30,7 @@ from .services.exporter import (
     resolve_optimized_image_path,
     resolve_raw_image_path,
 )
+from .services.acquisition import build_acquisition_plan
 from .services.node_runner import WorkflowExecutionError, execute_graph
 from .services.jobs import JobService
 from .services.storage import node_upload_dir, node_upload_path, upload_dir
@@ -109,6 +112,11 @@ def viewer(request: Request, session_id: str):
 @app.get("/workflow", response_class=HTMLResponse)
 def workflow_page(request: Request):
     return templates.TemplateResponse("workflow.html", {"request": request})
+
+
+@app.post(f"{settings.api_prefix}/acquisition/plan", response_model=AcquisitionPlanRead)
+def plan_acquisition(payload: AcquisitionPlanRequest):
+    return build_acquisition_plan(**payload.model_dump())
 
 
 @app.post(f"{settings.api_prefix}/sessions", response_model=SessionRead)

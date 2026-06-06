@@ -47,6 +47,7 @@ It is not yet production-complete for:
 See:
 
 - [`docs/CODEBASE_KNOWLEDGE.md`](docs/CODEBASE_KNOWLEDGE.md)
+- [`docs/ACQUISITION_PROTOCOL.md`](docs/ACQUISITION_PROTOCOL.md)
 - [`docs/ARCHITECTURE_AUDIT.md`](docs/ARCHITECTURE_AUDIT.md)
 - [`docs/REFACTOR_PLAN.md`](docs/REFACTOR_PLAN.md)
 - [`docs/REFACTOR_SUMMARY.md`](docs/REFACTOR_SUMMARY.md)
