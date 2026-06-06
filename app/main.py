@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .database import Base, SessionLocal, engine, get_db
-from .models import Annotation, ProcessingJob, Session as SessionModel, SourceImage
+from .logging_config import configure_logging
+from .models import Annotation, Session as SessionModel, SourceImage
 from .schemas import (
     AnnotationCreate,
     AnnotationRead,
@@ -28,7 +29,10 @@ from .services.exporter import (
     resolve_raw_image_path,
 )
 from .services.node_runner import WorkflowExecutionError, execute_graph
+from .services.jobs import JobService
 from .services.storage import node_upload_dir, node_upload_path, upload_dir
+
+configure_logging(settings.log_level, settings.log_format)
 
 app = FastAPI(title=settings.app_name)
 app.add_middleware(
@@ -273,22 +277,12 @@ def process_session(
     if image_count < 2:
         raise HTTPException(status_code=400, detail="At least 2 images are required")
 
-    active_job = (
-        db.query(ProcessingJob)
-        .filter(
-            ProcessingJob.session_id == session_id,
-            ProcessingJob.status.in_(["queued", "processing"]),
-        )
-        .first()
-    )
+    jobs = JobService(db)
+    active_job = jobs.active_job_for_session(session_id)
     if active_job:
         raise HTTPException(status_code=409, detail="A processing job is already active for this session")
 
-    session.status = "queued"
-    session.error_message = None
-    job = ProcessingJob(session_id=session_id, mode=payload.mode, status="queued")
-    db.add(job)
-    db.commit()
+    jobs.enqueue_processing_job(session, payload.mode)
 
     return ProcessResponse(message="Queued for agent processing", session_id=session_id, status="queued")
 

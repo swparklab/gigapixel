@@ -1,92 +1,62 @@
 import argparse
-import datetime as dt
+import logging
 import time
 
 from sqlalchemy.orm import Session
 
 from .config import settings
 from .database import Base, SessionLocal, engine
+from .logging_config import configure_logging
 from .models import ProcessingJob, Session as SessionModel
+from .services.jobs import JobService, utc_now
 from .services.tasks import run_pipeline
 
-
-def utc_now() -> dt.datetime:
-    return dt.datetime.now(dt.UTC)
+logger = logging.getLogger(__name__)
 
 
 def _claim_next_job(db: Session) -> ProcessingJob | None:
-    candidate = (
-        db.query(ProcessingJob)
-        .filter(ProcessingJob.status == "queued")
-        .order_by(ProcessingJob.created_at.asc(), ProcessingJob.id.asc())
-        .first()
-    )
-    if not candidate:
-        return None
-
-    updated = (
-        db.query(ProcessingJob)
-        .filter(ProcessingJob.id == candidate.id, ProcessingJob.status == "queued")
-        .update(
-            {
-                ProcessingJob.status: "processing",
-                ProcessingJob.started_at: utc_now(),
-                ProcessingJob.error_message: None,
-            },
-            synchronize_session=False,
-        )
-    )
-    db.commit()
-    if updated != 1:
-        return None
-
-    return db.get(ProcessingJob, candidate.id)
+    return JobService(db).claim_next_job()
 
 
 def _process_claimed_job(db: Session, job: ProcessingJob) -> None:
     started = utc_now()
+    jobs = JobService(db)
     session = db.get(SessionModel, job.session_id)
     if not session:
-        job.status = "failed"
-        job.error_message = f"Session not found: {job.session_id}"
-        job.finished_at = utc_now()
-        db.commit()
+        jobs.mark_missing_session(job)
         return
 
     try:
+        job_id = job.id
+        session_id = job.session_id
         result = run_pipeline(db, session, mode=job.mode)
-        job = db.get(ProcessingJob, job.id)
+        job = jobs.finish_job_from_session_result(job_id, result)
         if not job:
             return
 
-        job.finished_at = utc_now()
-        if result.status == "ready":
-            job.status = "done"
-            job.error_message = None
-        else:
-            job.status = "failed"
-            job.error_message = result.error_message or "Processing failed"
-        db.commit()
         elapsed = (utc_now() - started).total_seconds()
-        print(
-            f"[agent] finished job={job.id} session={job.session_id} "
-            f"job_status={job.status} session_status={result.status} elapsed={elapsed:.1f}s"
+        logger.info(
+            "agent job finished",
+            extra={
+                "job_id": job.id,
+                "session_id": job.session_id,
+                "job_status": job.status,
+                "session_status": result.status,
+                "elapsed_seconds": round(elapsed, 3),
+            },
         )
     except Exception as exc:
         db.rollback()
-        session = db.get(SessionModel, job.session_id)
-        if session:
-            session.status = "failed"
-            session.error_message = str(exc)
-
-        job = db.get(ProcessingJob, job.id)
-        if job:
-            job.status = "failed"
-            job.error_message = str(exc)
-            job.finished_at = utc_now()
-        db.commit()
+        job = jobs.fail_job(job.id, job.session_id, str(exc))
         elapsed = (utc_now() - started).total_seconds()
-        print(f"[agent] failed job={job.id} session={job.session_id} elapsed={elapsed:.1f}s error={exc}")
+        logger.exception(
+            "agent job failed",
+            extra={
+                "job_id": job.id if job else None,
+                "session_id": job.session_id if job else session_id,
+                "elapsed_seconds": round(elapsed, 3),
+            },
+        )
 
 
 def run_once() -> bool:
@@ -96,7 +66,10 @@ def run_once() -> bool:
         if not job:
             return False
 
-        print(f"[agent] processing job={job.id} session={job.session_id} mode={job.mode}")
+        logger.info(
+            "agent job processing",
+            extra={"job_id": job.id, "session_id": job.session_id, "mode": job.mode},
+        )
         _process_claimed_job(db, job)
         return True
     finally:
@@ -105,7 +78,7 @@ def run_once() -> bool:
 
 def run_forever(poll_interval: float) -> None:
     Base.metadata.create_all(bind=engine)
-    print(f"[agent] started. poll_interval={poll_interval}s")
+    logger.info("agent started", extra={"poll_interval_seconds": poll_interval})
     while True:
         processed = run_once()
         if not processed:
@@ -113,6 +86,7 @@ def run_forever(poll_interval: float) -> None:
 
 
 def main() -> None:
+    configure_logging(settings.log_level, settings.log_format)
     parser = argparse.ArgumentParser(description="Gigapixel processing agent")
     parser.add_argument(
         "--poll-interval",
@@ -131,13 +105,13 @@ def main() -> None:
 
     if args.once:
         processed = run_once()
-        print("[agent] processed one job." if processed else "[agent] no queued jobs.")
+        logger.info("agent once complete", extra={"processed": processed})
         return
 
     try:
         run_forever(args.poll_interval)
     except KeyboardInterrupt:
-        print("[agent] stopped.")
+        logger.info("agent stopped")
 
 
 if __name__ == "__main__":

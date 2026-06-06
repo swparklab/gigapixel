@@ -9,13 +9,14 @@ from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from ..errors import WorkflowError
 from ..models import Session as SessionModel, SourceImage
 from .exporter import build_download_filename, resolve_optimized_image_path, resolve_raw_image_path
 from .storage import node_upload_dir, node_upload_path, upload_dir
 from .tasks import run_pipeline
 
 
-class WorkflowExecutionError(RuntimeError):
+class WorkflowExecutionError(WorkflowError):
     pass
 
 

@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     tile_overlap: int = 1
     optimized_jpeg_quality: int = 85
     agent_poll_interval_seconds: float = 1.0
+    log_level: str = "INFO"
+    log_format: str = "json"
     raw_stitched_format: str = "bigtiff"
     raw_bigtiff_compression: str = "none"
     stitch_registration_megapix: float = 2.0
