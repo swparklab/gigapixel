@@ -1,0 +1,17 @@
+# AI / learned feature-matching stack (LoFTR, LightGlue).
+#
+# NOTE: As of this update these packages are also listed in requirements.txt and
+# install a CPU torch build by default. This file remains as the recommended
+# path for an NVIDIA GPU, where you want a CUDA torch build instead of CPU.
+#
+# GPU install (example, CUDA 12.1) — install CUDA torch FIRST, then the rest:
+#   py -3 -m pip install torch --index-url https://download.pytorch.org/whl/cu121
+#   py -3 -m pip install -r requirements-ai.txt
+# Then set STITCH_MATCHER_DEVICE=cuda (or leave it on auto).
+#
+# These power app/services/deep_matching.py. They are not strictly required:
+# when absent, registration falls back to the classical SIFT/ORB pipeline.
+
+torch>=2.2.0
+kornia>=0.7.3
+kornia-rs>=0.1.1

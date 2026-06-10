@@ -117,7 +117,17 @@ def read_image_bgr(path: Path) -> np.ndarray:
         else:
             image = image.convert("RGB")
         array = np.asarray(image)
-    return cv2.cvtColor(array, cv2.COLOR_RGB2BGR)
+    bgr = cv2.cvtColor(array, cv2.COLOR_RGB2BGR)
+    # Apply lens-distortion correction consistently for every consumer
+    # (feature detection, warping, gain estimation, blending). No-op by default.
+    try:
+        from .lens_correction import correct_image, is_enabled
+
+        if is_enabled():
+            bgr = correct_image(bgr, Path(path))
+    except Exception:
+        pass
+    return bgr
 
 
 def make_preview(image: np.ndarray) -> tuple[np.ndarray, float]:
@@ -231,9 +241,26 @@ def _reasonable_transform(matrix: np.ndarray) -> bool:
     return bool(singular_values[0] / max(singular_values[-1], 1e-6) <= 25.0)
 
 
-def _estimate_transform(left: FeatureSet, right: FeatureSet, matches: list) -> PairMatch | None:
-    pts_left = np.float32([left.keypoints[match.queryIdx].pt for match in matches])
-    pts_right = np.float32([right.keypoints[match.trainIdx].pt for match in matches])
+def build_pair_match(
+    left_index: int,
+    left_scale: float,
+    pts_left_preview: np.ndarray,
+    right_index: int,
+    right_scale: float,
+    pts_right_preview: np.ndarray,
+) -> PairMatch | None:
+    """Robustly estimate a left->right transform from preview-space matches.
+
+    Shared by the classical (SIFT/ORB) and learned (LoFTR/LightGlue) paths.
+    Points are in each image's preview coordinates; the resulting transform and
+    stored correspondences are lifted to full-resolution coordinates using the
+    convention ``source = preview / scale``.
+    """
+    pts_left = np.asarray(pts_left_preview, dtype=np.float32).reshape(-1, 2)
+    pts_right = np.asarray(pts_right_preview, dtype=np.float32).reshape(-1, 2)
+    if len(pts_left) < int(settings.stitch_planar_min_inliers):
+        return None
+
     model = str(settings.stitch_planar_transform_model).lower()
     threshold = float(settings.stitch_planar_ransac_threshold)
 
@@ -269,18 +296,18 @@ def _estimate_transform(left: FeatureSet, right: FeatureSet, matches: list) -> P
     errors = np.linalg.norm(projected - preview_right, axis=1)
     median_error = float(np.median(errors)) if len(errors) else 999.0
 
-    full_matrix = np.linalg.inv(_scale_matrix(right.scale)) @ matrix @ _scale_matrix(left.scale)
+    full_matrix = np.linalg.inv(_scale_matrix(right_scale)) @ matrix @ _scale_matrix(left_scale)
     if abs(full_matrix[2, 2]) > 1e-12:
         full_matrix = full_matrix / full_matrix[2, 2]
     if not _reasonable_transform(full_matrix):
         return None
 
-    points_left = preview_left.astype(np.float64) / float(left.scale)
-    points_right = preview_right.astype(np.float64) / float(right.scale)
+    points_left = preview_left.astype(np.float64) / float(left_scale)
+    points_right = preview_right.astype(np.float64) / float(right_scale)
     score = inliers / max(1.0, median_error + 1.0)
     return PairMatch(
-        left=left.index,
-        right=right.index,
+        left=left_index,
+        right=right_index,
         h_left_to_right=full_matrix.astype(np.float64),
         points_left=points_left,
         points_right=points_right,
@@ -288,6 +315,12 @@ def _estimate_transform(left: FeatureSet, right: FeatureSet, matches: list) -> P
         median_error=median_error,
         score=score,
     )
+
+
+def _estimate_transform(left: FeatureSet, right: FeatureSet, matches: list) -> PairMatch | None:
+    pts_left = np.float32([left.keypoints[match.queryIdx].pt for match in matches])
+    pts_right = np.float32([right.keypoints[match.trainIdx].pt for match in matches])
+    return build_pair_match(left.index, left.scale, pts_left, right.index, right.scale, pts_right)
 
 
 def pair_candidates(count: int):
@@ -303,7 +336,7 @@ def pair_candidates(count: int):
             yield left, right
 
 
-def estimate_pair_matches(features: list[FeatureSet], log: LogFn = _noop) -> list[PairMatch]:
+def _classical_pair_matches(features: list[FeatureSet], log: LogFn = _noop) -> list[PairMatch]:
     matches: list[PairMatch] = []
     tested = 0
     for left_idx, right_idx in pair_candidates(len(features)):
@@ -322,5 +355,72 @@ def estimate_pair_matches(features: list[FeatureSet], log: LogFn = _noop) -> lis
             f"median_error={pair.median_error:.3f}, score={pair.score:.2f}"
         )
 
-    log(f"[match] tested={tested}, accepted={len(matches)}")
+    log(f"[match] tested={tested}, accepted={len(matches)} (classical)")
     return matches
+
+
+def _deep_pair_matches(
+    features: list[FeatureSet],
+    image_paths: list[Path],
+    log: LogFn = _noop,
+) -> list[PairMatch] | None:
+    """Estimate pair matches with a learned matcher. Returns None to fall back."""
+    try:
+        from .deep_matching import create_matcher
+    except Exception:
+        return None
+
+    matcher = create_matcher(log)
+    if matcher is None:
+        return None
+
+    try:
+        deep_images = []
+        for idx, path in enumerate(image_paths):
+            prepared = matcher.prepare(path)
+            prepared.index = idx
+            deep_images.append(prepared)
+
+        matches: list[PairMatch] = []
+        tested = 0
+        for left_idx, right_idx in pair_candidates(len(features)):
+            tested += 1
+            corr = matcher.match(deep_images[left_idx], deep_images[right_idx])
+            if corr is None or len(corr.points_left) < int(settings.stitch_planar_min_inliers):
+                continue
+            pair = build_pair_match(
+                left_idx,
+                corr.left_scale,
+                corr.points_left,
+                right_idx,
+                corr.right_scale,
+                corr.points_right,
+            )
+            if pair is None:
+                continue
+            matches.append(pair)
+            log(
+                f"[match] {left_idx}->{right_idx}: inliers={pair.inliers}, "
+                f"median_error={pair.median_error:.3f}, score={pair.score:.2f} (learned)"
+            )
+
+        log(f"[match] tested={tested}, accepted={len(matches)} (learned {matcher.kind})")
+        if len(matches) < len(features) - 1:
+            log("[match] learned matcher under-connected; falling back to classical")
+            return None
+        return matches
+    except Exception as exc:  # pragma: no cover - depends on optional weights
+        log(f"[match] learned matcher failed ({exc}); falling back to classical")
+        return None
+
+
+def estimate_pair_matches(
+    features: list[FeatureSet],
+    log: LogFn = _noop,
+    image_paths: list[Path] | None = None,
+) -> list[PairMatch]:
+    if image_paths is not None:
+        deep = _deep_pair_matches(features, image_paths, log)
+        if deep is not None:
+            return deep
+    return _classical_pair_matches(features, log)

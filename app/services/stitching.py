@@ -163,18 +163,34 @@ def _tiff_compression():
     return value
 
 
+def _tiff_tile_shape():
+    if not bool(getattr(settings, "raw_bigtiff_tiled", True)):
+        return None
+    size = int(getattr(settings, "raw_bigtiff_tile_size", 512))
+    # tifffile requires tile dimensions to be multiples of 16.
+    size = max(16, (size // 16) * 16)
+    return (size, size)
+
+
 def _save_bigtiff_with_tifffile(rgb, output_path: Path) -> bool:
     if tifffile is None:
         return False
+    tile = _tiff_tile_shape()
+    kwargs = dict(
+        bigtiff=True,
+        photometric="rgb" if rgb.ndim == 3 else "minisblack",
+        metadata=None,
+        compression=_tiff_compression(),
+    )
+    # Prefer a tiled layout for efficient partial reads at gigapixel scale.
+    if tile is not None and rgb.shape[0] >= tile[0] and rgb.shape[1] >= tile[1]:
+        try:
+            tifffile.imwrite(str(output_path), rgb, tile=tile, **kwargs)
+            return True
+        except Exception:
+            pass
     try:
-        tifffile.imwrite(
-            str(output_path),
-            rgb,
-            bigtiff=True,
-            photometric="rgb" if rgb.ndim == 3 else "minisblack",
-            metadata=None,
-            compression=_tiff_compression(),
-        )
+        tifffile.imwrite(str(output_path), rgb, **kwargs)
         return True
     except Exception:
         return False

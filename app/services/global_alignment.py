@@ -112,51 +112,7 @@ def _sample_indices(total: int, limit: int) -> np.ndarray:
     return np.linspace(0, total - 1, limit, dtype=np.int64)
 
 
-def _optimize_affine_transforms(edges: list[PairMatch], count: int, root_index: int) -> tuple[list[np.ndarray], float]:
-    variables = (count - 1) * 6
-    if variables <= 0:
-        return [np.eye(3, dtype=np.float64)], 0.0
-
-    rows = []
-    rhs = []
-    max_samples = max(20, int(settings.stitch_planar_max_match_samples))
-
-    for edge in edges:
-        indices = _sample_indices(len(edge.points_left), max_samples)
-        weight = float(np.sqrt(max(edge.score, 1.0)))
-        for idx in indices:
-            left_x, left_y = edge.points_left[idx]
-            right_x, right_y = edge.points_right[idx]
-
-            row_x = np.zeros(variables, dtype=np.float64)
-            root_left = _add_affine_terms(row_x, edge.left, left_x, left_y, 0, 1.0, root_index)
-            root_right = _add_affine_terms(row_x, edge.right, right_x, right_y, 0, -1.0, root_index)
-            target_x = 0.0
-            if root_left is not None:
-                target_x -= root_left[0]
-            if root_right is not None:
-                target_x += root_right[0]
-            rows.append(row_x * weight)
-            rhs.append(target_x * weight)
-
-            row_y = np.zeros(variables, dtype=np.float64)
-            root_left = _add_affine_terms(row_y, edge.left, left_x, left_y, 1, 1.0, root_index)
-            root_right = _add_affine_terms(row_y, edge.right, right_x, right_y, 1, -1.0, root_index)
-            target_y = 0.0
-            if root_left is not None:
-                target_y -= left_y
-            if root_right is not None:
-                target_y += right_y
-            rows.append(row_y * weight)
-            rhs.append(target_y * weight)
-
-    if len(rows) < variables:
-        raise RuntimeError("Not enough constraints for global affine optimization.")
-
-    matrix = np.vstack(rows)
-    vector = np.asarray(rhs, dtype=np.float64)
-    solution, _, _, _ = np.linalg.lstsq(matrix, vector, rcond=None)
-
+def _solution_to_transforms(solution: np.ndarray, count: int, root_index: int) -> list[np.ndarray]:
     transforms = []
     for image_index in range(count):
         unknown = _unknown_index(image_index, root_index)
@@ -174,16 +130,123 @@ def _optimize_affine_transforms(edges: list[PairMatch], count: int, root_index: 
                 dtype=np.float64,
             )
         )
+    return transforms
 
-    residuals = []
-    for edge in edges:
+
+def _residual_per_correspondence(
+    transforms: list[np.ndarray],
+    edge_index: np.ndarray,
+    left_h: np.ndarray,
+    right_h: np.ndarray,
+    edges: list[PairMatch],
+) -> np.ndarray:
+    """Reprojection residual (px) for every stacked correspondence."""
+    residual = np.empty(len(edge_index), dtype=np.float64)
+    for k, edge in enumerate(edges):
+        sel = edge_index == k
+        if not np.any(sel):
+            continue
+        projected_left = (transforms[edge.left] @ left_h[sel].T).T[:, :2]
+        projected_right = (transforms[edge.right] @ right_h[sel].T).T[:, :2]
+        residual[sel] = np.linalg.norm(projected_left - projected_right, axis=1)
+    return residual
+
+
+def _optimize_affine_transforms(
+    edges: list[PairMatch], count: int, root_index: int, log: LogFn = _noop
+) -> tuple[list[np.ndarray], float]:
+    """Global affine bundle adjustment with iteratively reweighted least squares.
+
+    A single linear solve minimises the L2 reprojection error and is sensitive
+    to surviving outliers. Wrapping it in IRLS with a Huber weight progressively
+    downweights high-residual correspondences, which materially improves global
+    consistency on large heritage mosaics.
+    """
+    variables = (count - 1) * 6
+    if variables <= 0:
+        return [np.eye(3, dtype=np.float64)], 0.0
+
+    rows_x = []
+    rhs_x = []
+    rows_y = []
+    rhs_y = []
+    base_weight = []
+    edge_index = []
+    left_pts = []
+    right_pts = []
+    max_samples = max(20, int(settings.stitch_planar_max_match_samples))
+
+    for k, edge in enumerate(edges):
         indices = _sample_indices(len(edge.points_left), max_samples)
-        left_h = np.c_[edge.points_left[indices], np.ones(len(indices))]
-        right_h = np.c_[edge.points_right[indices], np.ones(len(indices))]
-        projected_left = (transforms[edge.left] @ left_h.T).T[:, :2]
-        projected_right = (transforms[edge.right] @ right_h.T).T[:, :2]
-        residuals.extend(np.linalg.norm(projected_left - projected_right, axis=1).tolist())
-    rms = float(np.sqrt(np.mean(np.square(residuals)))) if residuals else 0.0
+        weight = float(np.sqrt(max(edge.score, 1.0)))
+        for idx in indices:
+            left_x, left_y = edge.points_left[idx]
+            right_x, right_y = edge.points_right[idx]
+
+            row_x = np.zeros(variables, dtype=np.float64)
+            root_left = _add_affine_terms(row_x, edge.left, left_x, left_y, 0, 1.0, root_index)
+            root_right = _add_affine_terms(row_x, edge.right, right_x, right_y, 0, -1.0, root_index)
+            target_x = 0.0
+            if root_left is not None:
+                target_x -= root_left[0]
+            if root_right is not None:
+                target_x += root_right[0]
+
+            row_y = np.zeros(variables, dtype=np.float64)
+            root_left = _add_affine_terms(row_y, edge.left, left_x, left_y, 1, 1.0, root_index)
+            root_right = _add_affine_terms(row_y, edge.right, right_x, right_y, 1, -1.0, root_index)
+            target_y = 0.0
+            if root_left is not None:
+                target_y -= left_y
+            if root_right is not None:
+                target_y += right_y
+
+            rows_x.append(row_x)
+            rhs_x.append(target_x)
+            rows_y.append(row_y)
+            rhs_y.append(target_y)
+            base_weight.append(weight)
+            edge_index.append(k)
+            left_pts.append((left_x, left_y, 1.0))
+            right_pts.append((right_x, right_y, 1.0))
+
+    if len(rows_x) < variables:
+        raise RuntimeError("Not enough constraints for global affine optimization.")
+
+    ax = np.asarray(rows_x, dtype=np.float64)
+    ay = np.asarray(rows_y, dtype=np.float64)
+    bx = np.asarray(rhs_x, dtype=np.float64)
+    by = np.asarray(rhs_y, dtype=np.float64)
+    base_weight = np.asarray(base_weight, dtype=np.float64)
+    edge_index = np.asarray(edge_index, dtype=np.int64)
+    left_h = np.asarray(left_pts, dtype=np.float64)
+    right_h = np.asarray(right_pts, dtype=np.float64)
+
+    robust = bool(settings.stitch_planar_robust_refine)
+    iterations = max(1, int(settings.stitch_planar_robust_iterations)) if robust else 1
+    delta = max(0.5, float(settings.stitch_planar_huber_delta))
+
+    weight = base_weight.copy()
+    transforms = None
+    rms = 0.0
+    for iteration in range(iterations):
+        w = weight[:, None]
+        matrix = np.vstack([ax * w, ay * w])
+        vector = np.concatenate([bx * weight, by * weight])
+        solution, _, _, _ = np.linalg.lstsq(matrix, vector, rcond=None)
+        transforms = _solution_to_transforms(solution, count, root_index)
+
+        residual = _residual_per_correspondence(transforms, edge_index, left_h, right_h, edges)
+        rms = float(np.sqrt(np.mean(np.square(residual)))) if len(residual) else 0.0
+        if not robust:
+            break
+
+        # Huber reweighting: full weight within delta, 1/r beyond it.
+        huber = np.where(residual <= delta, 1.0, delta / np.maximum(residual, 1e-6))
+        weight = base_weight * np.sqrt(huber)
+        if iteration + 1 < iterations:
+            log(f"[align] robust iter {iteration + 1}/{iterations} rms={rms:.3f}px")
+
     return transforms, rms
 
 
@@ -208,8 +271,8 @@ def align_global(features: list[FeatureSet], pair_matches: list[PairMatch], log:
         return AlignmentResult(initial_transforms, root, tree, optimized=False, rms_error=None)
 
     try:
-        transforms, rms = _optimize_affine_transforms(pair_matches, count, root)
-        log(f"[align] global affine optimization rms={rms:.3f}px")
+        transforms, rms = _optimize_affine_transforms(pair_matches, count, root, log)
+        log(f"[align] global affine optimization rms={rms:.3f}px (robust={bool(settings.stitch_planar_robust_refine)})")
         return AlignmentResult(transforms, root, tree, optimized=True, rms_error=rms)
     except Exception as exc:
         log(f"[align] global optimization failed; using tree transforms. reason={exc}")

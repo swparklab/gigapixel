@@ -15,6 +15,9 @@ This project is designed for digital heritage acquisition and restoration workfl
 - Multi-image upload and session-based processing.
 - Scans-oriented stitching pipeline for flat or near-planar cultural heritage captures.
 - OpenCV-based feature detection, pair matching, global alignment, warping, seam handling, and blending.
+- Optional AI / learned feature matching (LoFTR, LightGlue) for high-accuracy registration on low-texture heritage surfaces, with automatic fallback to classical SIFT/ORB.
+- Robust global bundle adjustment (iteratively reweighted Huber least squares) for globally consistent alignment.
+- Tiled multi-band blending that preserves multi-band quality at gigapixel scale instead of degrading to feather compositing.
 - Raw high-resolution output as BigTIFF.
 - Optimized JPEG output for smaller distribution workflows.
 - Deep Zoom Image generation for web-scale viewing.
@@ -23,6 +26,68 @@ This project is designed for digital heritage acquisition and restoration workfl
 - Node-style workflow UI inspired by ComfyUI, n8n, Unreal Blueprint, and agent monitoring consoles.
 - Background processing agent for queued long-running jobs.
 - Structured JSON logging and initial unit tests.
+
+## Update Notes — Accuracy Upgrade (2026-06)
+
+This release reworks the stitching core for the highest achievable synthesis
+accuracy on cultural-heritage captures. Everything degrades gracefully: the
+classical pipeline still runs unchanged when the optional AI stack is absent.
+
+### Added
+
+1. **AI / learned feature matching** ([`app/services/deep_matching.py`](app/services/deep_matching.py)).
+   New LoFTR (detector-free dense matching) and LightGlue (DISK / ALIKED / SIFT)
+   backends produce far more reliable correspondences on the low-texture,
+   self-similar surfaces typical of paintings, textiles, ceramics, and stone.
+   Selected with `STITCH_MATCHER` (`auto` prefers LoFTR when `torch` + `kornia`
+   are available). GPU is auto-detected via `STITCH_MATCHER_DEVICE`.
+2. **Robust global bundle adjustment** ([`global_alignment.py`](app/services/global_alignment.py)).
+   The single linear affine solve is now wrapped in iteratively reweighted least
+   squares with a Huber loss, progressively downweighting outlier
+   correspondences for globally consistent alignment. Always on, no extra
+   dependencies (`STITCH_PLANAR_ROBUST_REFINE`).
+3. **Tiled multi-band blending for gigapixel canvases** ([`blending.py`](app/services/blending.py)).
+   Canvases above the in-memory cutoff previously degraded to feather
+   compositing. They now use global Brown–Lowe gain compensation plus per-tile
+   multi-band blending with distance-transform seam masks — verified seamless
+   across tile boundaries (`STITCH_PLANAR_TILED_MULTIBAND`).
+4. **Lens distortion correction** ([`lens_correction.py`](app/services/lens_correction.py)).
+   Optional radial/tangential undistortion applied identically to every source
+   before registration, removing seam "bow" that affine/homography cannot model.
+   Manual coefficients or automatic EXIF lookup via optional `lensfunpy`
+   (`STITCH_LENS_CORRECTION`). Disabled by default.
+5. **Tiled BigTIFF output** ([`stitching.py`](app/services/stitching.py)).
+   Raw output is written as a tiled BigTIFF for efficient partial reads by
+   pyvips DZI generation, OpenSeadragon, and GIS tools (`RAW_BIGTIFF_TILED`).
+
+### Changed
+
+- Registration preview resolution raised from 2200 px to 3200 px
+  (`STITCH_PLANAR_PREVIEW_MAX_DIM`); match-sample budget raised to 800.
+- Classical and learned matching now share one geometric verifier
+  (`build_pair_match`), so both paths get identical RANSAC validation.
+- AI packages (`torch`, `kornia`) are now listed in `requirements.txt` (CPU
+  build by default; use `requirements-ai.txt` for a CUDA build).
+
+### Verification
+
+- Test suite: **14 passed** (was 6), including new synthetic checks for robust
+  pair estimation, seamless multi-tile blending, lens-correction behavior, and
+  tiled-TIFF geometry ([`tests/test_stitch_accuracy.py`](tests/test_stitch_accuracy.py)).
+- End-to-end stitching validated on sample image sets through both the in-memory
+  multi-band and forced tiled multi-band paths.
+
+### Enable maximum accuracy
+
+```powershell
+py -3 -m pip install -r requirements.txt   # includes torch + kornia (CPU)
+Copy-Item .env.example .env                 # max-accuracy preset
+```
+
+With an NVIDIA GPU, install a CUDA torch build first (see `requirements-ai.txt`)
+and set `STITCH_MATCHER_DEVICE=cuda`. The robust bundle adjustment, higher-
+resolution registration, and tiled multi-band blending are active by default
+even without the AI stack installed.
 
 ## Project Status
 
@@ -252,8 +317,33 @@ Important settings:
 | `RAW_BIGTIFF_COMPRESSION` | `none` | BigTIFF compression mode |
 | `STITCH_FEATURE_DETECTOR` | `sift` | Feature detector, usually `sift` or `orb` |
 | `STITCH_PLANAR_TRANSFORM_MODEL` | `affine` | Alignment model for scans |
-| `STITCH_PLANAR_MULTIBAND_MAX_PIXELS` | `120000000` | Multiband blend cutoff before streaming feather fallback |
+| `STITCH_PLANAR_MULTIBAND_MAX_PIXELS` | `120000000` | In-memory multiband cutoff before the tiled multiband path |
+| `STITCH_MATCHER` | `auto` | `auto`/`loftr`/`disk_lightglue`/`sift_lightglue`/`aliked_lightglue`/`classic` |
+| `STITCH_MATCHER_DEVICE` | `auto` | Learned matcher device: `auto`/`cuda`/`cpu` |
+| `STITCH_MATCHER_INPUT_DIM` | `1600` | Long-edge size the learned matcher runs at |
+| `STITCH_PLANAR_ROBUST_REFINE` | `True` | Enable Huber IRLS global bundle adjustment |
+| `STITCH_PLANAR_TILED_MULTIBAND` | `True` | Tiled multiband blending for gigapixel canvases |
+| `STITCH_LENS_CORRECTION` | `False` | Undistort sources before registration |
+| `STITCH_LENS_K1` / `STITCH_LENS_K2` | `0.0` | Radial distortion coefficients |
+| `STITCH_LENS_AUTO` | `False` | Look up lens distortion from EXIF via `lensfunpy` |
+| `RAW_BIGTIFF_TILED` | `True` | Write a tiled BigTIFF for efficient partial reads |
+| `RAW_BIGTIFF_TILE_SIZE` | `512` | Tile size for tiled BigTIFF output |
 | `LOG_FORMAT` | `json` | Agent/API log format |
+
+### Highest-accuracy (AI) registration
+
+For the most accurate registration — especially on low-texture heritage
+surfaces where classical SIFT/ORB struggle — install the optional learned
+matching stack and leave `STITCH_MATCHER=auto`:
+
+```powershell
+py -3 -m pip install -r requirements-ai.txt
+```
+
+`auto` prefers LoFTR when `torch` + `kornia` are available and silently falls
+back to classical matching otherwise, so the pipeline runs unchanged without
+the optional dependencies. With an NVIDIA GPU, install a CUDA `torch` build and
+set `STITCH_MATCHER_DEVICE=cuda` (or leave it on `auto`).
 
 ## Data And Outputs
 
@@ -315,7 +405,7 @@ To keep the project maintainable:
 
 - Node workflow execution does not yet share the same queue model as classic processing.
 - Processing jobs do not yet have heartbeat, worker identity, stale recovery, or retry policy.
-- Very large BigTIFF workflows can still hit memory limits because some stages use full in-memory arrays.
+- Very large BigTIFF workflows can still hit memory limits because some stages (final canvas allocation) use full in-memory arrays, even though blending is now tiled.
 - Pillow DZI fallback is not appropriate for true gigapixel-scale production use. Use pyvips/libvips where possible.
 - Authentication and authorization are not implemented.
 - External browser libraries are currently loaded from CDNs.

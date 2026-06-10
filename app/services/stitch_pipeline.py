@@ -37,7 +37,7 @@ def run_scans_pipeline(image_paths: list[Path]) -> StitchPipelineResult:
         if weak:
             raise RuntimeError(f"Not enough visual features in: {', '.join(weak[:5])}")
 
-        pair_matches = estimate_pair_matches(features, logger)
+        pair_matches = estimate_pair_matches(features, logger, image_paths=image_paths)
         alignment = align_global(features, pair_matches, logger)
         canvas_plan = plan_canvas(features, alignment.transforms, logger)
         stitched = blend_full_resolution(image_paths, canvas_plan, logger)

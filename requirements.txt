@@ -10,5 +10,18 @@ pillow>=10.3.0
 tifffile>=2024.8.30
 jinja2>=3.1.4
 pytest>=8.2.0
+
+# AI / learned feature matching (LoFTR, LightGlue) for highest registration
+# accuracy on low-texture heritage surfaces. These install a CPU torch build by
+# default. For an NVIDIA GPU, install a CUDA torch build FIRST (see
+# requirements-ai.txt), then install the rest of this file.
+# If torch/kornia are unavailable at runtime the pipeline automatically falls
+# back to the classical SIFT/ORB matcher, so they remain effectively optional.
+torch>=2.2.0
+kornia>=0.7.3
+kornia-rs>=0.1.1
+
 # Optional (faster DZI generation when libvips is available):
 # pyvips>=2.2.2
+# Optional (automatic EXIF-based lens distortion correction):
+# lensfunpy>=1.14.0

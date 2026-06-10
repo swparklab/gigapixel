@@ -266,16 +266,30 @@ flowchart TD
 
 ## AI Inference Flow
 
-There is no machine-learning model loading or AI inference lifecycle in the current codebase.
+The registration stage has an **optional learned-matching path** in
+`app/services/deep_matching.py`. When `torch` + `kornia` are installed and
+`STITCH_MATCHER` is `auto` or a learned backend, image pairs are matched with a
+deep model instead of classical descriptors:
 
-The only computer-vision pipeline uses classical algorithms:
+- LoFTR (detector-free dense matching) — default `auto` choice, best for
+  low-texture, self-similar heritage surfaces.
+- DISK / ALIKED / SIFT keypoints combined with LightGlue graph matching.
+
+The learned matcher only replaces correspondence generation. Its output is fed
+into the same RANSAC verification (`build_pair_match`), robust global bundle
+adjustment, warping, and blending as the classical path. The model is loaded
+lazily and the whole module degrades gracefully: if the optional dependencies
+or weights are missing, or a run yields too few correspondences to connect the
+overlap graph, the pipeline falls back to classical SIFT/ORB matching.
+
+The remaining computer-vision pipeline uses classical algorithms:
 
 - EXIF orientation normalization through Pillow.
-- SIFT or ORB feature detection through OpenCV.
+- SIFT or ORB feature detection through OpenCV (fallback / `classic` backend).
 - Descriptor matching through BFMatcher or FLANN.
 - RANSAC transform estimation.
-- Graph-based alignment and affine least-squares optimization.
-- OpenCV warping, exposure compensation, seam finding, and blending.
+- Graph-based alignment and Huber IRLS affine bundle adjustment.
+- OpenCV warping, exposure/gain compensation, seam finding, and (tiled) multi-band blending.
 
 The node workflow UI has "agent console" behavior, but it does not currently connect to an LLM or external AI agent service.
 
