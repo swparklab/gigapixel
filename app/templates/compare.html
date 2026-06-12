@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AETHER · Restore Before / After</title>
+  <link rel="stylesheet" href="/static/theme.css" />
+  <style>
+    body { margin: 0; min-height: 100vh; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 22px 18px 60px; }
+    .bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 18px; }
+    .bar button, .bar a {
+      padding: 9px 16px; border-radius: 12px; cursor: pointer; border: none; text-decoration: none;
+      color: var(--color-on-primary);
+      background: linear-gradient(135deg, var(--aether-accent-1), var(--aether-accent-2));
+      box-shadow: 0 8px 24px rgba(91,140,255,0.32);
+    }
+    .bar a.ghost { background: var(--color-surface-subtle); color: var(--color-text-primary); border: 1px solid var(--color-border-strong); }
+    .compare {
+      position: relative; width: 100%; aspect-ratio: 4 / 3; border-radius: 20px; overflow: hidden;
+      border: 1px solid var(--color-border-strong); box-shadow: var(--shadow-lg); background: #0b1020;
+      user-select: none; touch-action: none;
+    }
+    .compare img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+    .compare .after { clip-path: inset(0 0 0 var(--split, 50%)); }
+    .handle {
+      position: absolute; top: 0; bottom: 0; left: var(--split, 50%); width: 2px;
+      background: linear-gradient(var(--aether-accent-1), var(--aether-accent-2)); transform: translateX(-1px);
+    }
+    .handle::after {
+      content: "‹ ›"; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      background: var(--color-surface-elevated); color: var(--color-text-primary);
+      border: 1px solid var(--color-border-strong); border-radius: 999px; padding: 4px 10px; font-size: 0.9rem;
+    }
+    .tag { position: absolute; top: 12px; padding: 4px 12px; border-radius: 999px; font-size: 0.8rem;
+      background: rgba(0,0,0,0.45); color: #fff; backdrop-filter: blur(6px); }
+    .tag.l { left: 12px; } .tag.r { right: 12px; }
+    #status { color: var(--color-text-secondary); font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="bar">
+      <div class="aether-brand"><span class="aether-mark">&#9672;</span> AETHER <span class="aether-sub">Restore</span></div>
+      <button id="runBtn">Run AI Restore</button>
+      <a class="ghost" href="/viewer/{{ session_id }}">&larr; Viewer</a>
+      <span id="status"></span>
+    </div>
+    <div class="compare" id="compare">
+      <img class="before" id="beforeImg" alt="before" />
+      <img class="after" id="afterImg" alt="after" />
+      <div class="handle" id="handle"></div>
+      <span class="tag l">BEFORE</span>
+      <span class="tag r">AFTER · RESTORED</span>
+    </div>
+  </main>
+
+  <script>
+    const sessionId = "{{ session_id }}";
+    const statusEl = document.getElementById("status");
+    const before = document.getElementById("beforeImg");
+    const after = document.getElementById("afterImg");
+    const compare = document.getElementById("compare");
+    const handle = document.getElementById("handle");
+
+    before.src = `/api/sessions/${sessionId}/download/optimized`;
+
+    function loadAfter() {
+      after.src = `/api/sessions/${sessionId}/download/restored?t=${Date.now()}`;
+      after.onerror = () => { statusEl.textContent = "No restored image yet — click Run AI Restore."; };
+      after.onload = () => { statusEl.textContent = "Drag the divider to compare."; };
+    }
+
+    function setSplit(clientX) {
+      const rect = compare.getBoundingClientRect();
+      let pct = ((clientX - rect.left) / rect.width) * 100;
+      pct = Math.max(0, Math.min(100, pct));
+      compare.style.setProperty("--split", pct + "%");
+    }
+    let dragging = false;
+    compare.addEventListener("pointerdown", (e) => { dragging = true; setSplit(e.clientX); });
+    window.addEventListener("pointermove", (e) => { if (dragging) setSplit(e.clientX); });
+    window.addEventListener("pointerup", () => { dragging = false; });
+
+    document.getElementById("runBtn").addEventListener("click", async () => {
+      statusEl.textContent = "Restoring (de-colour · de-crack · de-noise)…";
+      try {
+        const res = await fetch(`/api/sessions/${sessionId}/restore`, { method: "POST" });
+        const data = await res.json();
+        statusEl.textContent = "Restored: " + (data.actions || []).join(" · ");
+        loadAfter();
+      } catch (e) {
+        statusEl.textContent = "Restore failed.";
+      }
+    });
+
+    loadAfter();
+  </script>
+</body>
+</html>

@@ -35,8 +35,10 @@ def test_interior_hole_is_detected_and_repaired():
     assert report.hole_count == 1
     assert report.repairable
 
-    fixed, actions = repair_stitch(img.copy(), report)
+    fixed, actions, synthetic = repair_stitch(img.copy(), report)
     assert actions and "inpaint_holes" in actions[0]
+    assert synthetic.shape == img.shape[:2]
+    assert int((synthetic > 0).sum()) > 0  # synthetic pixels were marked
 
     after = assess_stitch_quality(fixed, registration_rms=1.0)
     assert after.hole_count == 0
@@ -56,6 +58,7 @@ def test_near_empty_result_is_broken():
 def test_repair_skips_when_no_holes():
     img = _content(400, 400, seed=3)
     report = assess_stitch_quality(img)
-    fixed, actions = repair_stitch(img.copy(), report)
+    fixed, actions, synthetic = repair_stitch(img.copy(), report)
     assert actions == []
     assert np.array_equal(fixed, img)
+    assert int((synthetic > 0).sum()) == 0

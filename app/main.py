@@ -19,13 +19,23 @@ from .schemas import (
     AnnotationRead,
     AcquisitionPlanRead,
     AcquisitionPlanRequest,
+    ChangeDetectRequest,
+    ChangeDetectResponse,
+    ConditionResponse,
     DamageResponse,
+    FocusStackResponse,
+    PhotometricRequest,
+    PhotometricResponse,
     ProcessRequest,
     ProcessResponse,
+    RestoreResponse,
+    ScaleRequest,
+    ScaleResponse,
     SegmentRequest,
     SegmentResponse,
     SessionCreate,
     SessionRead,
+    SplatResponse,
 )
 from .services.exporter import (
     build_download_filename,
@@ -360,6 +370,299 @@ def get_quality_report(session_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Quality report not available")
 
     return FileResponse(report_path, media_type="application/json")
+
+
+def _serve_sidecar(session_id: str, db: Session, rel: str, media_type: str):
+    if not db.get(SessionModel, session_id):
+        raise HTTPException(status_code=404, detail="Session not found")
+    path = output_dir(session_id) / rel
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"{rel} not available")
+    return FileResponse(path, media_type=media_type)
+
+
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/manifest")
+def get_manifest(session_id: str, db: Session = Depends(get_db)):
+    return _serve_sidecar(session_id, db, "processing_manifest.json", "application/json")
+
+
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/color")
+def get_color_report(session_id: str, db: Session = Depends(get_db)):
+    return _serve_sidecar(session_id, db, "color_report.json", "application/json")
+
+
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/provenance")
+def get_provenance(session_id: str, db: Session = Depends(get_db)):
+    return _serve_sidecar(session_id, db, "provenance.json", "application/json")
+
+
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/provenance/{{layer}}")
+def get_provenance_layer(session_id: str, layer: str, db: Session = Depends(get_db)):
+    if layer not in {"coverage", "synthetic", "uncertainty"}:
+        raise HTTPException(status_code=400, detail="Unknown provenance layer")
+    return _serve_sidecar(session_id, db, f"provenance/{layer}.png", "image/png")
+
+
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/iiif/info.json")
+def get_iiif_info(session_id: str, db: Session = Depends(get_db)):
+    return _serve_sidecar(session_id, db, "iiif/info.json", "application/json")
+
+
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/iiif/manifest")
+def get_iiif_manifest(session_id: str, db: Session = Depends(get_db)):
+    return _serve_sidecar(session_id, db, "iiif/manifest.json", "application/json")
+
+
+@app.post(f"{settings.api_prefix}/sessions/{{session_id}}/scale", response_model=ScaleResponse)
+def calibrate_scale(session_id: str, payload: ScaleRequest, db: Session = Depends(get_db)):
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    from .services.scale import scale_from_marker, scale_from_reference
+
+    if None not in (payload.point_a_x, payload.point_a_y, payload.point_b_x, payload.point_b_y) and payload.length_mm:
+        result = scale_from_reference(
+            (payload.point_a_x, payload.point_a_y), (payload.point_b_x, payload.point_b_y), payload.length_mm
+        )
+    else:
+        if session.status != "ready":
+            raise HTTPException(status_code=409, detail="Session is not ready yet")
+        import cv2
+        from PIL import Image
+
+        Image.MAX_IMAGE_PIXELS = None
+        raw_path = resolve_raw_image_path(session)
+        with Image.open(raw_path) as src:
+            import numpy as np
+
+            bgr = cv2.cvtColor(np.asarray(src.convert("RGB")), cv2.COLOR_RGB2BGR)
+        result = scale_from_marker(bgr, payload.marker_length_mm)
+    return ScaleResponse(**result.to_dict())
+
+
+@app.post(f"{settings.api_prefix}/sessions/{{session_id}}/change-detection", response_model=ChangeDetectResponse)
+def run_change_detection(session_id: str, payload: ChangeDetectRequest, db: Session = Depends(get_db)):
+    session = db.get(SessionModel, session_id)
+    other = db.get(SessionModel, payload.other_session_id)
+    if not session or not other:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.status != "ready" or other.status != "ready":
+        raise HTTPException(status_code=409, detail="Both sessions must be ready")
+
+    import cv2
+    import numpy as np
+    from PIL import Image
+
+    from .services.change_detection import detect_changes
+
+    Image.MAX_IMAGE_PIXELS = None
+
+    def _read(s, max_dim=3000):
+        with Image.open(resolve_raw_image_path(s)) as src:
+            img = src.convert("RGB")
+            scale = min(1.0, max_dim / float(max(img.size)))
+            if scale < 1.0:
+                img = img.resize((int(img.size[0] * scale), int(img.size[1] * scale)), Image.LANCZOS)
+            return cv2.cvtColor(np.asarray(img), cv2.COLOR_RGB2BGR)
+
+    result, _mask = detect_changes(_read(other), _read(session), sensitivity=payload.sensitivity)
+    data = result.to_dict()
+    return ChangeDetectResponse(**data)
+
+
+def _session_source_paths(session: SessionModel) -> list[Path]:
+    return [Path(img.file_path) for img in sorted(session.images, key=lambda x: x.sort_order)]
+
+
+@app.post(f"{settings.api_prefix}/sessions/{{session_id}}/focus-stack", response_model=FocusStackResponse)
+def run_focus_stack(session_id: str, db: Session = Depends(get_db)):
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    paths = _session_source_paths(session)
+    if len(paths) < 2:
+        raise HTTPException(status_code=400, detail="Focus stacking needs at least 2 source images")
+
+    import cv2
+
+    from .services.focus_stack import focus_stack_paths
+
+    fused = focus_stack_paths(paths)
+    out_path = output_dir(session_id) / "focus_stacked.jpg"
+    ok, encoded = cv2.imencode(".jpg", fused, [cv2.IMWRITE_JPEG_QUALITY, 95])
+    if not ok:
+        raise HTTPException(status_code=500, detail="Failed to encode fused image")
+    encoded.tofile(str(out_path))
+    return FocusStackResponse(ok=True, output=str(out_path), frames=len(paths))
+
+
+@app.post(f"{settings.api_prefix}/sessions/{{session_id}}/photometric", response_model=PhotometricResponse)
+def run_photometric(session_id: str, payload: PhotometricRequest, db: Session = Depends(get_db)):
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    paths = _session_source_paths(session)
+    if len(paths) < 3:
+        raise HTTPException(status_code=400, detail="Photometric stereo needs at least 3 lit images")
+    if len(payload.light_dirs) != len(paths):
+        raise HTTPException(status_code=400, detail="Provide one light direction per source image")
+
+    import cv2
+
+    from .services.feature_matching import read_image_bgr
+    from .services.photometric import photometric_stereo
+
+    images = [read_image_bgr(p) for p in paths]
+    result = photometric_stereo(images, payload.light_dirs)
+    base = output_dir(session_id)
+    normal_path = base / "normal_map.png"
+    albedo_path = base / "albedo.png"
+    cv2.imencode(".png", result.normal_map_bgr)[1].tofile(str(normal_path))
+    cv2.imencode(".png", (result.albedo * 255).astype("uint8"))[1].tofile(str(albedo_path))
+    return PhotometricResponse(ok=True, normal_map=str(normal_path), albedo=str(albedo_path))
+
+
+def _read_raw_bgr(session: SessionModel, max_dim: int = 0):
+    """Read the raw mosaic as BGR, optionally downscaled to a long-edge cap."""
+    import cv2
+    import numpy as np
+    from PIL import Image
+
+    Image.MAX_IMAGE_PIXELS = None
+    with Image.open(resolve_raw_image_path(session)) as src:
+        img = src.convert("RGB")
+        if max_dim and max(img.size) > max_dim:
+            scale = max_dim / float(max(img.size))
+            img = img.resize((int(img.size[0] * scale), int(img.size[1] * scale)), Image.LANCZOS)
+        return cv2.cvtColor(np.asarray(img), cv2.COLOR_RGB2BGR)
+
+
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/iiif/{{region}}/{{size}}/{{rotation}}/{{quality_format}}")
+def iiif_image(session_id: str, region: str, size: str, rotation: str, quality_format: str, db: Session = Depends(get_db)):
+    session = db.get(SessionModel, session_id)
+    if not session or session.status != "ready":
+        raise HTTPException(status_code=404, detail="Image not available")
+    from fastapi import Response
+
+    from .services.iiif import IIIFError, render_iiif
+
+    quality, _, fmt = quality_format.rpartition(".")
+    if not fmt:
+        raise HTTPException(status_code=400, detail="format required, e.g. default.jpg")
+    try:
+        data, media = render_iiif(resolve_raw_image_path(session), region, size, rotation, quality or "default", fmt)
+    except IIIFError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return Response(content=data, media_type=media)
+
+
+@app.post(f"{settings.api_prefix}/sessions/{{session_id}}/analyze-condition", response_model=ConditionResponse)
+def analyze_condition_endpoint(session_id: str, db: Session = Depends(get_db)):
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.status != "ready":
+        raise HTTPException(status_code=409, detail="Session is not ready yet")
+
+    import cv2
+
+    from .services.damage_ai import analyze_condition
+
+    bgr = _read_raw_bgr(session, max_dim=int(settings.condition_max_dim))
+    report, overlay = analyze_condition(bgr)
+    base = output_dir(session_id)
+    cv2.imencode(".png", overlay)[1].tofile(str(base / "condition_overlay.png"))
+    import json
+
+    (base / "condition_report.json").write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
+    data = report.to_dict()
+    data["overlay_url"] = f"{settings.api_prefix}/sessions/{session_id}/condition/overlay"
+    return ConditionResponse(**data)
+
+
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/condition/overlay")
+def get_condition_overlay(session_id: str, db: Session = Depends(get_db)):
+    return _serve_sidecar(session_id, db, "condition_overlay.png", "image/png")
+
+
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/condition")
+def get_condition_report(session_id: str, db: Session = Depends(get_db)):
+    return _serve_sidecar(session_id, db, "condition_report.json", "application/json")
+
+
+@app.post(f"{settings.api_prefix}/sessions/{{session_id}}/restore", response_model=RestoreResponse)
+def restore_endpoint(session_id: str, db: Session = Depends(get_db)):
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.status != "ready":
+        raise HTTPException(status_code=409, detail="Session is not ready yet")
+
+    import cv2
+
+    from .services.restore import restore_image
+
+    bgr = _read_raw_bgr(session, max_dim=int(settings.restore_max_dim))
+    result = restore_image(bgr)
+    out = output_dir(session_id) / "restored.jpg"
+    cv2.imencode(".jpg", result.image, [cv2.IMWRITE_JPEG_QUALITY, 95])[1].tofile(str(out))
+    return RestoreResponse(
+        ok=True,
+        backend=result.backend,
+        actions=result.actions,
+        before_url=f"{settings.api_prefix}/sessions/{session_id}/download/optimized",
+        after_url=f"{settings.api_prefix}/sessions/{session_id}/download/restored",
+        compare_url=f"/compare/{session_id}",
+    )
+
+
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/download/restored")
+def download_restored(session_id: str, db: Session = Depends(get_db)):
+    return _serve_sidecar(session_id, db, "restored.jpg", "image/jpeg")
+
+
+@app.post(f"{settings.api_prefix}/sessions/{{session_id}}/splat", response_model=SplatResponse)
+def splat_endpoint(session_id: str, db: Session = Depends(get_db)):
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.status != "ready":
+        raise HTTPException(status_code=409, detail="Session is not ready yet")
+
+    from .services.splat import generate_splat
+
+    bgr = _read_raw_bgr(session, max_dim=2400)
+    result = generate_splat(bgr, output_dir(session_id))
+    api = settings.api_prefix
+    return SplatResponse(
+        ok=True,
+        num_points=result.num_points,
+        depth_backend=result.depth_backend,
+        pointcloud_url=f"{api}/sessions/{session_id}/pointcloud.ply" if result.pointcloud_path else None,
+        gaussian_url=f"{api}/sessions/{session_id}/gaussians.ply" if result.gaussian_path else None,
+        explorer_url=f"/viewer3d/{session_id}",
+    )
+
+
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/pointcloud.ply")
+def get_pointcloud(session_id: str, db: Session = Depends(get_db)):
+    return _serve_sidecar(session_id, db, "pointcloud.ply", "application/octet-stream")
+
+
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/gaussians.ply")
+def get_gaussians(session_id: str, db: Session = Depends(get_db)):
+    return _serve_sidecar(session_id, db, "gaussians.ply", "application/octet-stream")
+
+
+@app.get("/viewer3d/{session_id}", response_class=HTMLResponse)
+def viewer3d_page(session_id: str, request: Request):
+    return templates.TemplateResponse("viewer3d.html", {"request": request, "session_id": session_id})
+
+
+@app.get("/compare/{session_id}", response_class=HTMLResponse)
+def compare_page(session_id: str, request: Request):
+    return templates.TemplateResponse("compare.html", {"request": request, "session_id": session_id})
 
 
 @app.get(f"{settings.api_prefix}/sessions/{{session_id}}/tiles/{{tile_path:path}}")

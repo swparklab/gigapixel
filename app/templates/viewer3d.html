@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AETHER · 3D Explorer</title>
+  <link rel="stylesheet" href="/static/theme.css" />
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    #scene { position: fixed; inset: 0; }
+    .hud {
+      position: fixed; top: 16px; left: 16px; z-index: 5;
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    }
+    .hud .panelbox {
+      padding: 10px 14px; border-radius: 14px;
+      background: var(--color-surface); backdrop-filter: blur(16px);
+      border: 1px solid var(--color-border-strong); box-shadow: var(--shadow-md);
+    }
+    .hud button {
+      padding: 8px 14px; border-radius: 10px; cursor: pointer; border: none;
+      color: var(--color-on-primary);
+      background: linear-gradient(135deg, var(--aether-accent-1), var(--aether-accent-2));
+      box-shadow: 0 8px 24px rgba(91,140,255,0.35);
+    }
+    #status { color: var(--color-text-secondary); font-size: 0.85rem; }
+    a.back { color: var(--color-text-primary); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div id="scene"></div>
+  <div class="hud">
+    <div class="panelbox aether-brand"><span class="aether-mark">&#9672;</span> AETHER <span class="aether-sub">3D Explorer</span></div>
+    <div class="panelbox"><button id="genBtn">Generate / Regenerate 3D</button></div>
+    <div class="panelbox"><span id="status">Loading…</span></div>
+    <div class="panelbox"><a class="back" href="/viewer/{{ session_id }}">&larr; Back to viewer</a></div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://unpkg.com/three@0.128.0/examples/js/loaders/PLYLoader.js"></script>
+  <script>
+    const sessionId = "{{ session_id }}";
+    const statusEl = document.getElementById("status");
+    const host = document.getElementById("scene");
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    host.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x060912);
+    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.001, 100);
+    camera.position.set(0, 0, 1.2);
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    let pointsObject = null;
+
+    function loadCloud() {
+      statusEl.textContent = "Loading point cloud…";
+      const loader = new THREE.PLYLoader();
+      loader.load(
+        `/api/sessions/${sessionId}/pointcloud.ply?t=${Date.now()}`,
+        (geometry) => {
+          geometry.computeBoundingBox();
+          geometry.center();
+          if (pointsObject) scene.remove(pointsObject);
+          const material = new THREE.PointsMaterial({ size: 0.0016, vertexColors: true, sizeAttenuation: true });
+          pointsObject = new THREE.Points(geometry, material);
+          scene.add(pointsObject);
+          statusEl.textContent = `${geometry.attributes.position.count.toLocaleString()} points`;
+        },
+        undefined,
+        () => { statusEl.textContent = "No 3D yet — click Generate."; }
+      );
+    }
+
+    async function generate() {
+      statusEl.textContent = "Estimating depth & building 3D…";
+      try {
+        const res = await fetch(`/api/sessions/${sessionId}/splat`, { method: "POST" });
+        const data = await res.json();
+        statusEl.textContent = `Built ${data.num_points.toLocaleString()} primitives (depth: ${data.depth_backend})`;
+        loadCloud();
+      } catch (e) {
+        statusEl.textContent = "Generation failed.";
+      }
+    }
+
+    document.getElementById("genBtn").addEventListener("click", generate);
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    (function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    })();
+
+    loadCloud();
+  </script>
+</body>
+</html>

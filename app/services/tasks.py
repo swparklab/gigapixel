@@ -23,20 +23,42 @@ def _parse_registration_rms(message: str) -> float | None:
     return float(match.group(1)) if match else None
 
 
-def _run_quality_control(stitched, message: str, output_base: Path):
-    """Assess the mosaic, optionally repair holes, and write a JSON sidecar."""
-    if not bool(settings.stitch_quality_check):
+def _calibrate_color(stitched, output_base: Path):
+    """Colour-calibrate the mosaic and write a color_report.json sidecar."""
+    if not bool(settings.color_management):
         return stitched, None
+    try:
+        from .color import calibrate
+
+        log: list[str] = []
+        calibrated, report = calibrate(stitched, log=log.append)
+        payload = report.to_dict()
+        payload["log"] = log
+        (output_base / "color_report.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        logger.info("colour calibrated", extra={"method": report.method, "calibrated": report.calibrated})
+        return calibrated, report
+    except Exception as exc:  # pragma: no cover - best-effort
+        logger.warning("colour calibration skipped", extra={"error": str(exc)})
+        return stitched, None
+
+
+def _run_quality_control(stitched, message: str, output_base: Path):
+    """Assess the mosaic, optionally repair holes, write the QC sidecar.
+
+    Returns ``(stitched, report, synthetic_mask)``.
+    """
+    if not bool(settings.stitch_quality_check):
+        return stitched, None, None
 
     actions_log: list[str] = []
     report = assess_stitch_quality(
         stitched, registration_rms=_parse_registration_rms(message), log=actions_log.append
     )
 
+    synthetic_mask = None
     if bool(settings.stitch_auto_repair) and report.repairable:
-        stitched, actions = repair_stitch(stitched, report, log=actions_log.append)
+        stitched, actions, synthetic_mask = repair_stitch(stitched, report, log=actions_log.append)
         if actions:
-            # Re-assess so the saved report reflects the repaired image.
             repaired = assess_stitch_quality(
                 stitched, registration_rms=report.registration_rms, log=actions_log.append
             )
@@ -45,27 +67,36 @@ def _run_quality_control(stitched, message: str, output_base: Path):
             report = repaired
 
     try:
-        report_path = output_base / "quality_report.json"
         payload = report.to_dict()
         payload["log"] = actions_log
-        report_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        (output_base / "quality_report.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
     except Exception as exc:  # pragma: no cover - sidecar write is best-effort
         logger.warning("failed to write quality report", extra={"error": str(exc)})
 
     logger.info(
         "stitch quality assessed",
-        extra={
-            "verdict": report.verdict,
-            "hole_count": report.hole_count,
-            "coverage_ratio": round(report.coverage_ratio, 4),
-            "repaired": report.repaired,
-        },
+        extra={"verdict": report.verdict, "hole_count": report.hole_count, "repaired": report.repaired},
     )
-    return stitched, report
+    return stitched, report, synthetic_mask
+
+
+def _write_provenance(stitched, synthetic_mask, output_base: Path):
+    """Write coverage/synthetic/uncertainty layers; return the summary dict."""
+    if not bool(settings.provenance_maps):
+        return None
+    try:
+        from .provenance import compute_provenance, save_provenance
+
+        summary, maps = compute_provenance(stitched, synthetic_mask)
+        save_provenance(maps, output_base)
+        (output_base / "provenance.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        return summary
+    except Exception as exc:  # pragma: no cover - best-effort
+        logger.warning("provenance maps skipped", extra={"error": str(exc)})
+        return None
 
 
 def _maybe_enhance(stitched, output_base: Path) -> None:
-    """Write a non-archival AI-enhanced JPEG variant when enabled."""
     if not bool(settings.stitch_enhance):
         return
     try:
@@ -88,6 +119,28 @@ def _maybe_enhance(stitched, output_base: Path) -> None:
         logger.warning("enhancement skipped", extra={"error": str(exc)})
 
 
+def _write_iiif(session_id: str, width: int, height: int, output_base: Path) -> None:
+    if not bool(settings.iiif_enabled):
+        return
+    try:
+        from .iiif import write_iiif
+
+        write_iiif(session_id, width, height, output_base)
+    except Exception as exc:  # pragma: no cover - best-effort
+        logger.warning("IIIF generation skipped", extra={"error": str(exc)})
+
+
+def _write_manifest(session_id: str, output_base: Path, mode: str, message: str, context: dict) -> None:
+    if not bool(settings.processing_manifest):
+        return
+    try:
+        from .manifest import write_manifest
+
+        write_manifest(session_id, output_base, mode=mode, message=message, context=context)
+    except Exception as exc:  # pragma: no cover - best-effort
+        logger.warning("manifest generation skipped", extra={"error": str(exc)})
+
+
 def _set_session_status(db: Session, session: SessionModel, status: str, error_message: str | None = None) -> None:
     session.status = status
     session.error_message = error_message
@@ -108,9 +161,14 @@ def run_pipeline(db: Session, session: SessionModel, mode: str = "scans") -> Ses
 
         output_base = output_dir(session.id)
 
-        # Inspect the mosaic for defects and repair enclosed holes before saving,
-        # so the saved BigTIFF/JPEG/DZI reflect the corrected pixels.
-        stitched, _quality_report = _run_quality_control(stitched, message, output_base)
+        # Colour calibration first so every saved variant is colour-managed.
+        stitched, color_report = _calibrate_color(stitched, output_base)
+
+        # Defect inspection + hole repair before saving outputs.
+        stitched, quality_report, synthetic_mask = _run_quality_control(stitched, message, output_base)
+
+        # Provenance/uncertainty layers separating measured vs reconstructed pixels.
+        provenance_summary = _write_provenance(stitched, synthetic_mask, output_base)
 
         raw_stitched_path = output_base / "stitched_raw.tif"
         optimized_stitched_path = output_base / "stitched_optimized.jpg"
@@ -131,12 +189,30 @@ def run_pipeline(db: Session, session: SessionModel, mode: str = "scans") -> Ses
             max_source_pixels=settings.max_source_pixels,
         )
 
+        final_width = dzi_width if dzi_width else width
+        final_height = dzi_height if dzi_height else height
+
+        _write_iiif(session.id, final_width, final_height, output_base)
+        _write_manifest(
+            session.id,
+            output_base,
+            mode=mode,
+            message=message,
+            context={
+                "width": final_width,
+                "height": final_height,
+                "source_image_count": len(image_paths),
+                "quality": quality_report.to_dict() if quality_report else None,
+                "color": color_report.to_dict() if color_report else None,
+                "provenance": provenance_summary,
+            },
+        )
+
         session.status = "ready"
-        # Keep the raw path as canonical stitched output path.
         session.stitched_image_path = str(raw_stitched_path)
         session.dzi_descriptor_path = str(descriptor_path)
-        session.width = dzi_width if dzi_width else width
-        session.height = dzi_height if dzi_height else height
+        session.width = final_width
+        session.height = final_height
         session.error_message = None
         db.commit()
         db.refresh(session)

@@ -220,6 +220,21 @@ Important distinction: classic processing uses a queued polling agent. Node work
 | `GET` | `/api/sessions/{session_id}/download/enhanced` | Download the AI-enhanced variant |
 | `POST` | `/api/sessions/{session_id}/segment` | SAM/GrabCut click-to-segment outline |
 | `POST` | `/api/sessions/{session_id}/detect-damage` | Crack/damage region detection |
+| `GET` | `/api/sessions/{session_id}/manifest` | Processing manifest (params, versions, SHA-256) |
+| `GET` | `/api/sessions/{session_id}/color` | Colour calibration report (dE2000) |
+| `GET` | `/api/sessions/{session_id}/provenance` | Provenance summary + layer PNGs |
+| `GET` | `/api/sessions/{session_id}/iiif/info.json` | IIIF Image API descriptor |
+| `GET` | `/api/sessions/{session_id}/iiif/manifest` | IIIF Presentation manifest |
+| `POST` | `/api/sessions/{session_id}/scale` | Dimensional scale calibration |
+| `POST` | `/api/sessions/{session_id}/change-detection` | Multi-temporal change detection |
+| `POST` | `/api/sessions/{session_id}/focus-stack` | All-in-focus fusion |
+| `POST` | `/api/sessions/{session_id}/photometric` | Photometric-stereo normals + albedo |
+| `GET` | `/api/sessions/{session_id}/iiif/{region}/{size}/{rotation}/{quality}.{format}` | Live IIIF Image API 3.0 |
+| `POST` | `/api/sessions/{session_id}/analyze-condition` | AI crack + discolouration detection |
+| `POST` | `/api/sessions/{session_id}/restore` | AI restoration (de-colour/crack/noise) |
+| `GET` | `/compare/{session_id}` | Before/After restore comparison page |
+| `POST` | `/api/sessions/{session_id}/splat` | Image-to-3D (point cloud + Gaussian PLY) |
+| `GET` | `/viewer3d/{session_id}` | WebGL 3D explorer |
 | `GET` | `/api/sessions/{session_id}/tiles/{tile_path}` | Serve DZI tile |
 | `GET` | `/api/sessions/{session_id}/annotations` | List annotations |
 | `POST` | `/api/sessions/{session_id}/annotations` | Create annotation |
@@ -298,6 +313,25 @@ Additional optional AI capabilities, each with a classical fallback:
 - `segmentation.py` — Segment Anything (or GrabCut) click-segmentation plus
   classical crack/damage detection for viewer annotation.
 - `enhance.py` — Real-ESRGAN (or Lanczos+denoise) non-archival enhanced variant.
+
+Archival-science modules (classical core, deep/contrib upgrades optional):
+
+- `color.py` — ColorChecker CCM + CIE dE2000 + FADGI/Metamorfoze grading.
+- `provenance.py` — coverage / synthetic / uncertainty layers.
+- `manifest.py` — processing manifest, SHA-256 fixity, Dublin Core.
+- `scale.py` — ArUco / reference-length dimensional calibration.
+- `focus_stack.py` — ECC-aligned Laplacian/wavelet all-in-focus fusion.
+- `iiif.py` — IIIF Image + Presentation descriptors.
+- `evaluation.py` — known-transform registration benchmark.
+- `change_detection.py` — multi-temporal change mapping.
+- `photometric.py` — photometric-stereo surface normals + albedo.
+
+Agent-platform modules:
+
+- `iiif.py` — live IIIF Image API 3.0 rendering + descriptors.
+- `damage_ai.py` — Hessian-ridge crack + CIELAB discolouration detection.
+- `restore.py` — de-colour / de-crack / de-noise restoration.
+- `splat.py` — monocular depth -> point cloud + 3D Gaussian Splatting PLY.
 
 The remaining computer-vision pipeline uses classical algorithms:
 

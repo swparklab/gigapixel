@@ -34,3 +34,7 @@ kornia-rs>=0.1.1
 # pyiqa>=0.1.11                 # CLIP-IQA learned no-reference quality score (QC)
 # segment-anything>=1.0         # SAM click-segmentation (needs a checkpoint; set SAM_CHECKPOINT)
 # realesrgan>=0.3.0             # Real-ESRGAN super-resolution for the enhanced variant
+#
+# Optional archival-science extras:
+# opencv-contrib-python>=4.9.0  # enables cv2.mcc ColorChecker detection and cv2.aruco
+#                               # scale markers (gray-world WB / reference scale work without it)

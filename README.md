@@ -23,6 +23,12 @@ This project is designed for digital heritage acquisition and restoration workfl
 - Deep retrieval-based overlap graph (DINOv2 embeddings) for robust matching of large unordered image sets.
 - SAM-assisted smart annotation and crack/damage detection in the viewer (GrabCut fallback when SAM weights are absent).
 - Optional AI output enhancement (Real-ESRGAN super-resolution / denoise) as a non-archival viewing variant.
+- Archival-science layer: colour calibration with CIE dE2000 + FADGI/Metamorfoze grading, measured-vs-reconstructed provenance/uncertainty maps, dimensional scale calibration, focus stacking, multi-temporal change detection, photometric-stereo surface normals, a SHA-256 processing manifest, and IIIF output.
+- "AETHER" 3D/glass UI theme with an ambient animated background.
+- Live **IIIF Image API 3.0** server (region/size/rotation/quality/format) — standard for global heritage institutions (Mirador / Universal Viewer).
+- **AI condition analysis** of cracks (Hessian ridge) and discolouration (CIELAB anomaly: yellowing / fading / staining).
+- **AI restoration** (de-colour, de-crack, de-noise) with a Before/After comparison slider.
+- **Image-to-3D** — monocular-depth-lifted point cloud and 3D Gaussian Splatting (`.ply`) with a WebGL 3D explorer.
 - Raw high-resolution output as BigTIFF.
 - Optimized JPEG output for smaller distribution workflows.
 - Deep Zoom Image generation for web-scale viewing.
@@ -147,6 +153,104 @@ Verification: test suite **24 passed**, including AI-feature fallback tests
 (retrieval pairing of shuffled duplicates, IQA ordering, click-segmentation,
 damage detection, enhancement scaling) in
 [`tests/test_ai_features.py`](tests/test_ai_features.py).
+
+## Update Notes — Archival Science Pack & AETHER UI
+
+Turns the stitching engine into an archival-grade acquisition platform, and
+re-skins the app as a 3D/glass "AETHER" product. Each capability has a working
+classical implementation; deep/optional paths upgrade it when available.
+
+1. **Colour / radiometric calibration** ([`color.py`](app/services/color.py)).
+   Detects a 24-patch ColorChecker (OpenCV `mcc`), fits a colour-correction
+   matrix, and reports CIE **dE2000** graded against **FADGI / Metamorfoze**
+   tolerances; gray-world white balance when no target is present. Writes
+   `color_report.json` and colour-manages every saved variant.
+2. **Provenance / uncertainty layers** ([`provenance.py`](app/services/provenance.py)).
+   Ancillary `coverage` / `synthetic` / `uncertainty` PNGs so reconstructed
+   (inpainted) pixels are never mistaken for measurements — the repair stage now
+   returns an explicit synthetic-pixel mask.
+3. **Processing manifest + fixity + metadata** ([`manifest.py`](app/services/manifest.py)).
+   `processing_manifest.json` records parameters, library versions, inputs and
+   **SHA-256** of every artefact, plus a Dublin Core sidecar — reproducible and
+   preservation-ready.
+4. **Dimensional scale calibration** ([`scale.py`](app/services/scale.py)).
+   Real-world mm/px and DPI from an ArUco fiducial of known size, or from a
+   user-supplied reference length (`POST .../scale`).
+5. **Focus stacking** ([`focus_stack.py`](app/services/focus_stack.py)).
+   ECC-aligned Laplacian/wavelet all-in-focus fusion of a focus stack
+   (`POST .../focus-stack`) — the capability the acquisition planner already
+   budgets for.
+6. **IIIF output** ([`iiif.py`](app/services/iiif.py)).
+   IIIF Image API `info.json` + Presentation `manifest.json` for Mirador /
+   Universal Viewer interoperability.
+7. **Registration evaluation harness** ([`evaluation.py`](app/services/evaluation.py)).
+   Warps an image by a known transform and measures recovered-vs-truth corner
+   error — a controlled accuracy benchmark.
+8. **Multi-temporal change detection** ([`change_detection.py`](app/services/change_detection.py)).
+   Registers two captures of one object and highlights what changed
+   (`POST .../change-detection`) — conservation monitoring.
+9. **Photometric stereo** ([`photometric.py`](app/services/photometric.py)).
+   Per-pixel surface normals + albedo from a known-light-direction stack
+   (`POST .../photometric`) — RTI-style relief for brushstrokes and tool marks.
+
+**AETHER UI** ([`static/theme.css`](app/static/theme.css)): a glassmorphic, neon,
+depth-layered theme with an animated aurora background and a product brand mark,
+loaded over the existing markup (all element IDs preserved, JS untouched).
+
+`opencv-contrib-python` enables ColorChecker (`cv2.mcc`) and ArUco scale markers;
+without it, gray-world white balance and reference-length scaling still work.
+
+Verification: test suite **34 passed**, including
+[`tests/test_science.py`](tests/test_science.py) (dE2000 correctness, provenance,
+focus-stack sharpness gain, IIIF structure, known-transform recovery, change
+detection, photometric stereo, manifest fixity).
+
+## Update Notes — Gigapixel Agent Platform
+
+Promotes the system to an agentic heritage platform. Every feature runs real
+algorithms (verified end-to-end through the API), with optional deep models
+that upgrade quality when installed.
+
+1. **Live IIIF Image API 3.0 server** ([`iiif.py`](app/services/iiif.py),
+   `GET …/iiif/{region}/{size}/{rotation}/{quality}.{format}`). Serves arbitrary
+   region/size/rotation/quality/format from the raw mosaic; `info.json` now
+   advertises **level2**. Drop the `info.json` URL into Mirador or Universal
+   Viewer and it works.
+2. **AI condition analysis** ([`damage_ai.py`](app/services/damage_ai.py),
+   `POST …/analyze-condition`). A multiscale **Hessian ridge filter** finds
+   cracks; **CIELAB** background-anomaly analysis classifies discolouration as
+   *yellowing / fading / staining*, each with a bounding box and severity, plus
+   a visual overlay.
+3. **AI restoration** ([`restore.py`](app/services/restore.py),
+   `POST …/restore`). Virtually undoes discolouration (illuminant + cast
+   correction + chroma revival), inpaints detected cracks (LaMa when available,
+   else Telea), and denoises — served as a non-archival variant with a
+   **Before/After slider** at `/compare/{id}`.
+4. **Image-to-3D / 3D Gaussian Splatting** ([`splat.py`](app/services/splat.py),
+   `POST …/splat`). Estimates monocular depth (Depth-Anything / MiDaS when
+   available, else a luminance relief model), back-projects to 3D, and writes a
+   colour **point cloud** and a standards-compliant **3D Gaussian Splatting
+   `.ply`**. A WebGL explorer (`/viewer3d/{id}`, Three.js) lets you orbit the
+   surface.
+
+These ship with classical engines that genuinely work; install the optional
+deep stacks for higher fidelity:
+
+```powershell
+py -3 -m pip install transformers          # Depth-Anything monocular depth
+py -3 -m pip install timm                  # MiDaS depth (alternative)
+py -3 -m pip install simple-lama-inpainting # LaMa crack inpainting for restore
+```
+
+The viewer gains **Condition**, **AI Restore** and **3D Explore** actions
+beside the existing smart-annotation tools.
+
+Verification: test suite **41 passed**, including
+[`tests/test_agent_platform.py`](tests/test_agent_platform.py) (IIIF region/size
+parsing + rendering, level2 info, crack+discolouration detection, yellow-cast
+reduction by restore, depth/point-cloud generation, standards-compliant
+Gaussian `.ply`). A full API run — process → IIIF → condition → restore → splat
+— was exercised against a real session.
 
 ## Project Status
 
@@ -320,6 +424,20 @@ The agent emits structured JSON logs. Example:
 | Enhanced download | `/api/sessions/{session_id}/download/enhanced` |
 | Smart segment | `POST /api/sessions/{session_id}/segment` |
 | Damage detection | `POST /api/sessions/{session_id}/detect-damage` |
+| Processing manifest | `/api/sessions/{session_id}/manifest` |
+| Colour report | `/api/sessions/{session_id}/color` |
+| Provenance report | `/api/sessions/{session_id}/provenance` |
+| Provenance layer | `/api/sessions/{session_id}/provenance/{coverage\|synthetic\|uncertainty}` |
+| IIIF info / manifest | `/api/sessions/{session_id}/iiif/info.json` · `/iiif/manifest` |
+| Scale calibration | `POST /api/sessions/{session_id}/scale` |
+| Change detection | `POST /api/sessions/{session_id}/change-detection` |
+| Focus stacking | `POST /api/sessions/{session_id}/focus-stack` |
+| Photometric stereo | `POST /api/sessions/{session_id}/photometric` |
+| IIIF Image API | `/api/sessions/{session_id}/iiif/{region}/{size}/{rotation}/{quality}.{format}` |
+| Condition analysis | `POST /api/sessions/{session_id}/analyze-condition` |
+| AI restore | `POST /api/sessions/{session_id}/restore` · compare at `/compare/{session_id}` |
+| Image-to-3D | `POST /api/sessions/{session_id}/splat` · explorer at `/viewer3d/{session_id}` |
+| Point cloud / splat | `/api/sessions/{session_id}/pointcloud.ply` · `/gaussians.ply` |
 
 ## Typical Workflow
 

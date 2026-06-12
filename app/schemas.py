@@ -63,6 +63,89 @@ class DamageResponse(BaseModel):
     regions: list[DamageRegion]
 
 
+class ScaleRequest(BaseModel):
+    # Either provide a reference (two points + mm) or rely on a fiducial marker.
+    point_a_x: float | None = None
+    point_a_y: float | None = None
+    point_b_x: float | None = None
+    point_b_y: float | None = None
+    length_mm: float | None = None
+    marker_length_mm: float | None = None
+
+
+class ScaleResponse(BaseModel):
+    calibrated: bool
+    method: str
+    pixels_per_mm: float | None = None
+    dpi: float | None = None
+    marker_id: int | None = None
+    note: str = ""
+
+
+class ChangeDetectRequest(BaseModel):
+    other_session_id: str
+    sensitivity: float = Field(default=0.12, ge=0.02, le=0.9)
+
+
+class ChangeRegion(BaseModel):
+    x: int
+    y: int
+    w: int
+    h: int
+    area: int
+
+
+class ChangeDetectResponse(BaseModel):
+    aligned: bool
+    change_fraction: float
+    regions: list[ChangeRegion]
+    note: str = ""
+
+
+class FocusStackResponse(BaseModel):
+    ok: bool
+    output: str
+    frames: int
+
+
+class PhotometricRequest(BaseModel):
+    # One [x, y, z] light direction per source image, in capture order.
+    light_dirs: list[list[float]]
+
+
+class PhotometricResponse(BaseModel):
+    ok: bool
+    normal_map: str
+    albedo: str
+
+
+class ConditionResponse(BaseModel):
+    backend: str
+    crack_density: float
+    discolour_fraction: float
+    cracks: list[dict]
+    discolouration: list[dict]
+    overlay_url: str
+
+
+class RestoreResponse(BaseModel):
+    ok: bool
+    backend: str
+    actions: list[str]
+    before_url: str
+    after_url: str
+    compare_url: str
+
+
+class SplatResponse(BaseModel):
+    ok: bool
+    num_points: int
+    depth_backend: str
+    pointcloud_url: str | None = None
+    gaussian_url: str | None = None
+    explorer_url: str
+
+
 class ProcessRequest(BaseModel):
     mode: str = Field(default="scans", pattern="^(scans|panorama)$")
 

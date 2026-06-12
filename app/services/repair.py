@@ -100,20 +100,26 @@ def _resolve_backend() -> str:
     return "lama" if _LamaInpainter.get() is not None else "classical"
 
 
-def repair_stitch(image_bgr: np.ndarray, report: QualityReport, log: LogFn = _noop) -> tuple[np.ndarray, list[str]]:
-    """Inpaint enclosed interior holes. Returns (image, actions)."""
+def repair_stitch(
+    image_bgr: np.ndarray, report: QualityReport, log: LogFn = _noop
+) -> tuple[np.ndarray, list[str], np.ndarray]:
+    """Inpaint enclosed interior holes.
+
+    Returns ``(image, actions, synthetic_mask)`` where ``synthetic_mask`` marks
+    every pixel that was reconstructed (255) rather than measured (0).
+    """
     actions: list[str] = []
+    height, width = image_bgr.shape[:2]
+    synthetic = np.zeros((height, width), dtype=np.uint8)
     if not report.holes:
-        return image_bgr, actions
+        return image_bgr, actions, synthetic
     if not report.repairable:
         log("[repair] holes too large to inpaint credibly; skipping")
-        return image_bgr, ["skipped: holes exceed repair fraction"]
+        return image_bgr, ["skipped: holes exceed repair fraction"], synthetic
 
     backend = _resolve_backend()
     if backend == "none":
-        return image_bgr, ["skipped: repair backend disabled"]
-
-    height, width = image_bgr.shape[:2]
+        return image_bgr, ["skipped: repair backend disabled"], synthetic
     radius = max(1, int(settings.stitch_repair_inpaint_radius))
     dilate = max(0, int(settings.stitch_repair_dilate))
     pad = max(16, radius * 4)
@@ -153,6 +159,7 @@ def repair_stitch(image_bgr: np.ndarray, report: QualityReport, log: LogFn = _no
 
         active = mask > 0
         roi[active] = filled[active]
+        synthetic[ry0:ry1, rx0:rx1][active] = 255
         total_px += hole_px
         repaired_regions += 1
 
@@ -160,4 +167,4 @@ def repair_stitch(image_bgr: np.ndarray, report: QualityReport, log: LogFn = _no
         action = f"inpaint_holes: {repaired_regions} region(s), {total_px} px, backend={used_backend}"
         actions.append(action)
         log(f"[repair] {action}")
-    return result, actions
+    return result, actions, synthetic

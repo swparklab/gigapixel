@@ -474,11 +474,69 @@ function injectSmartControls() {
   dmgBtn.style.cssText = segBtn.style.cssText + "background:#374151;";
   dmgBtn.addEventListener("click", () => detectDamageInView().catch(() => {}));
 
+  const ko0 = currentLang() === "ko";
+  const mkBtn = (label, handler) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    b.style.cssText = segBtn.style.cssText + "background:#312e81;";
+    b.addEventListener("click", () => handler().catch(() => {}));
+    return b;
+  };
+  const condBtn = mkBtn(ko0 ? "🔬 조건 분석" : "🔬 Condition", async () => {
+    condBtn.textContent = ko0 ? "분석 중…" : "Analyzing…";
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/analyze-condition`, { method: "POST" });
+      const d = await res.json();
+      condBtn.textContent = ko0
+        ? `🔬 균열 ${d.cracks.length} · 변색 ${d.discolouration.length}`
+        : `🔬 ${d.cracks.length} cracks · ${d.discolouration.length} discol.`;
+      window.open(`/api/sessions/${sessionId}/condition/overlay`, "_blank");
+    } catch (e) {
+      condBtn.textContent = ko0 ? "🔬 조건 분석" : "🔬 Condition";
+    }
+  });
+  const restoreBtn = mkBtn(ko0 ? "✨ AI 복원" : "✨ AI Restore", async () => {
+    window.open(`/compare/${sessionId}`, "_blank");
+  });
+  const splatBtn = mkBtn(ko0 ? "🧊 3D 탐색" : "🧊 3D Explore", async () => {
+    window.open(`/viewer3d/${sessionId}`, "_blank");
+  });
+
   panel.appendChild(segBtn);
   panel.appendChild(dmgBtn);
+  panel.appendChild(condBtn);
+  panel.appendChild(restoreBtn);
+  panel.appendChild(splatBtn);
   const host = document.getElementById("openseadragon") || document.body;
   if (getComputedStyle(host).position === "static") host.style.position = "relative";
   host.appendChild(panel);
+
+  // Reports panel (top-right): open the science sidecars produced by the pipeline.
+  const reports = document.createElement("div");
+  reports.className = "smart-annotate-panel aether-reports";
+  reports.style.cssText =
+    "position:absolute;top:12px;right:12px;z-index:30;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:55%;";
+  const ko = currentLang() === "ko";
+  const links = [
+    [ko ? "품질" : "Quality", `/api/sessions/${sessionId}/quality`],
+    [ko ? "컬러" : "Color", `/api/sessions/${sessionId}/color`],
+    [ko ? "출처" : "Provenance", `/api/sessions/${sessionId}/provenance`],
+    [ko ? "매니페스트" : "Manifest", `/api/sessions/${sessionId}/manifest`],
+    ["IIIF", `/api/sessions/${sessionId}/iiif/manifest`],
+  ];
+  links.forEach(([label, href]) => {
+    const a = document.createElement("a");
+    a.href = href;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.textContent = label;
+    a.className = "aether-report-link";
+    a.style.cssText =
+      "padding:5px 10px;border-radius:999px;font-size:0.78rem;text-decoration:none;border:1px solid var(--color-border-strong,#456);background:var(--color-surface-subtle,#1c243a);color:var(--color-text-primary,#eaf1ff);";
+    reports.appendChild(a);
+  });
+  host.appendChild(reports);
 }
 
 function _polygonCentroid(points) {

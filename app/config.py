@@ -172,6 +172,61 @@ class Settings(BaseSettings):
     # Skip enhancement when the output already exceeds this many pixels.
     stitch_enhance_max_pixels: int = 600_000_000
 
+    # --- Color / radiometric calibration (archival accuracy) -----------------
+    # Detect a ColorChecker-style target, white-balance, and report CIE dE2000
+    # against reference patches. Writes a color_report.json sidecar.
+    color_management: bool = True
+    color_target_auto: bool = True        # auto-detect the colour target
+    color_working_space: str = "sRGB"
+    # Informational conformance profile for the QC report: fadgi | metamorfoze.
+    color_conformance_target: str = "fadgi"
+
+    # --- Dimensional scale calibration ---------------------------------------
+    # Recover real-world units from a fiducial marker (ArUco) or a known
+    # reference length so outputs carry mm/px and DPI.
+    scale_calibration: bool = True
+    scale_marker_dict: str = "DICT_4X4_50"
+    scale_marker_length_mm: float = 0.0   # physical marker side length (mm)
+
+    # --- Focus stacking (all-in-focus fusion) --------------------------------
+    focus_stack_align: bool = True
+    focus_stack_method: str = "laplacian"  # laplacian | wavelet
+
+    # --- Provenance / uncertainty layers -------------------------------------
+    # Emit ancillary masks separating measured vs reconstructed pixels and a
+    # local uncertainty proxy, so synthetic pixels are never mistaken for data.
+    provenance_maps: bool = True
+
+    # --- Processing manifest, fixity, descriptive metadata -------------------
+    processing_manifest: bool = True       # machine-readable provenance + SHA-256
+    embed_metadata: bool = True            # Dublin Core / XMP sidecar
+
+    # --- IIIF interoperability -----------------------------------------------
+    # Emit an IIIF Image API info.json and a Presentation manifest alongside DZI,
+    # and serve a live IIIF Image API 3.0 endpoint (region/size/rotation/quality).
+    iiif_enabled: bool = True
+    iiif_base_url: str = ""                # external base URL, else relative
+    iiif_max_size: int = 4096             # max long edge a single IIIF request returns
+
+    # --- AI condition analysis (cracks + discolouration) ---------------------
+    condition_backend: str = "auto"       # auto | deep | classical
+    condition_max_dim: int = 4000         # analysis resolution
+    condition_crack_sensitivity: float = 0.5   # 0..1
+    condition_discolor_sensitivity: float = 0.5
+
+    # --- AI restoration ------------------------------------------------------
+    restore_backend: str = "auto"         # auto | deep | classical
+    restore_decolor: bool = True          # correct discolouration / yellowing
+    restore_decrack: bool = True          # inpaint detected cracks
+    restore_denoise: bool = True
+    restore_max_dim: int = 0              # 0 = full resolution
+
+    # --- Image-to-3D (Gaussian Splatting / point cloud) ----------------------
+    splat_depth_backend: str = "auto"     # auto | depth_anything | midas | relief
+    splat_max_points: int = 1_500_000     # cap on emitted 3D primitives
+    splat_depth_strength: float = 0.35    # relief depth amplitude (0..1)
+    splat_format: str = "both"            # pointcloud | gaussian | both
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
