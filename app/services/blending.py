@@ -227,6 +227,24 @@ def _exclusive_seam_masks(masks: list[np.ndarray]) -> list[np.ndarray]:
     return exclusive
 
 
+def _alloc_canvas(height: int, width: int, log: LogFn):
+    """Allocate the working canvas in RAM, or disk-backed memmaps for very large
+    gigapixel outputs when streaming is enabled — bounding peak memory to a tile
+    plus the cropped result instead of the full canvas."""
+    pixels = height * width
+    if bool(settings.streaming_compositor) and pixels > int(settings.streaming_threshold_pixels):
+        import tempfile
+
+        tmp = Path(tempfile.mkdtemp(prefix="ghv_stream_"))
+        canvas = np.memmap(tmp / "canvas.dat", dtype=np.uint8, mode="w+", shape=(height, width, 3))
+        coverage = np.memmap(tmp / "coverage.dat", dtype=np.uint8, mode="w+", shape=(height, width))
+        canvas[:] = 0
+        coverage[:] = 0
+        log(f"[blend] streaming compositor: disk-backed canvas at {tmp}")
+        return canvas, coverage, tmp
+    return np.zeros((height, width, 3), dtype=np.uint8), np.zeros((height, width), dtype=np.uint8), None
+
+
 def tiled_multiband_blend(image_paths: list[Path], canvas_plan: CanvasPlan, log: LogFn = _noop) -> np.ndarray:
     """Multi-band blend a gigapixel canvas tile-by-tile with global gains."""
     width = int(canvas_plan.width)
@@ -242,8 +260,8 @@ def tiled_multiband_blend(image_paths: list[Path], canvas_plan: CanvasPlan, log:
     margin = max(64, int(settings.stitch_planar_tile_overlap))
     tile_side = max(1024, int(np.sqrt(tile_pixels)))
 
-    canvas = np.zeros((height, width, 3), dtype=np.uint8)
-    coverage = np.zeros((height, width), dtype=bool)
+    canvas, coverage_u8, _stream_dir = _alloc_canvas(height, width, log)
+    coverage = coverage_u8  # 0/1 uint8 acts as boolean mask
     bands = max(1, int(settings.stitch_planar_multiband_bands))
 
     tiles_x = int(np.ceil(width / tile_side))
@@ -314,7 +332,15 @@ def tiled_multiband_blend(image_paths: list[Path], canvas_plan: CanvasPlan, log:
     if not np.any(coverage):
         raise RuntimeError("Tiled multiband blending produced an empty canvas.")
     ys, xs = np.where(coverage)
-    return canvas[int(ys.min()) : int(ys.max()) + 1, int(xs.min()) : int(xs.max()) + 1].copy()
+    # np.array(...) forces a real in-RAM copy, independent of the memmap file.
+    result = np.array(canvas[int(ys.min()) : int(ys.max()) + 1, int(xs.min()) : int(xs.max()) + 1])
+
+    if _stream_dir is not None:
+        import shutil
+
+        del canvas, coverage
+        shutil.rmtree(_stream_dir, ignore_errors=True)
+    return result
 
 
 def _feather_compose_tile(imgs, masks, tw, th):

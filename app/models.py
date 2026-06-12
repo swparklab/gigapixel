@@ -22,6 +22,7 @@ class Session(Base):
     dzi_descriptor_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     width: Mapped[int | None] = mapped_column(Integer, nullable=True)
     height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # comma-separated auto-tags
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True),
@@ -83,5 +84,11 @@ class ProcessingJob(Base):
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     started_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Queue robustness: worker lease, heartbeat and retry accounting.
+    worker_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    heartbeat_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    lease_expires_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, default=3)
 
     session: Mapped[Session] = relationship("Session", back_populates="jobs")

@@ -227,6 +227,32 @@ class Settings(BaseSettings):
     splat_depth_strength: float = 0.35    # relief depth amplitude (0..1)
     splat_format: str = "both"            # pointcloud | gaussian | both
 
+    # --- Job queue robustness ------------------------------------------------
+    job_lease_seconds: int = 600          # a claimed job is "stale" past this
+    job_heartbeat_seconds: int = 15       # worker heartbeat cadence
+    job_max_attempts: int = 3             # retry budget per job
+    job_stale_recovery: bool = True       # requeue stale jobs automatically
+
+    # --- Multi-view 3D reconstruction ----------------------------------------
+    recon_backend: str = "auto"           # auto | colmap_gsplat | multiview_depth
+    recon_max_images: int = 200
+
+    # --- Corpus semantic search / auto-tagging -------------------------------
+    semantic_backend: str = "auto"        # auto | clip | classical
+    semantic_tag_threshold: float = 0.22
+
+    # --- Acquisition coverage QA ---------------------------------------------
+    coverage_min_overlap_inliers: int = 30
+
+    # --- Optional API authentication -----------------------------------------
+    # When non-empty, /api requests must carry  X-API-Key: <api_key>.
+    api_key: str = ""
+
+    # --- Streaming gigapixel compositor --------------------------------------
+    streaming_compositor: bool = True
+    streaming_threshold_pixels: int = 800_000_000
+    streaming_tile: int = 2048
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

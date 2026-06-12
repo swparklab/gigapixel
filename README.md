@@ -29,6 +29,11 @@ This project is designed for digital heritage acquisition and restoration workfl
 - **AI condition analysis** of cracks (Hessian ridge) and discolouration (CIELAB anomaly: yellowing / fading / staining).
 - **AI restoration** (de-colour, de-crack, de-noise) with a Before/After comparison slider.
 - **Image-to-3D** — monocular-depth-lifted point cloud and 3D Gaussian Splatting (`.ply`) with a WebGL 3D explorer.
+- **Multi-view 3D reconstruction** — registers all views and fuses them (COLMAP + gsplat when available, depth-fusion fallback).
+- **Robust job queue** — worker leases, heartbeats, automatic stale recovery, retries, and queue-position reporting.
+- **Corpus semantic search + auto-tagging** (CLIP / classical) across sessions.
+- **Acquisition coverage QA** — overlap-graph connectivity check with recommendations before stitching.
+- **Streaming gigapixel compositor** (disk-backed canvas) and **optional API-key authentication**.
 - Raw high-resolution output as BigTIFF.
 - Optimized JPEG output for smaller distribution workflows.
 - Deep Zoom Image generation for web-scale viewing.
@@ -252,6 +257,47 @@ reduction by restore, depth/point-cloud generation, standards-compliant
 Gaussian `.ply`). A full API run — process → IIIF → condition → restore → splat
 — was exercised against a real session.
 
+## Update Notes — Platform Operations
+
+Finishes the platform with reliability, scale, multi-view 3D, discovery and
+access control.
+
+1. **Robust job queue** ([`jobs.py`](app/services/jobs.py),
+   [`agent.py`](app/agent.py)). Worker leases, a background **heartbeat** thread,
+   automatic **stale-job recovery** (requeue within the retry budget, else
+   fail), attempt counting, and `GET …/queue` position reporting. Schema evolves
+   via an additive in-place migration ([`database.py`](app/database.py)).
+2. **Multi-view 3D reconstruction** ([`recon3d.py`](app/services/recon3d.py),
+   `POST …/reconstruct3d`). Fuses **all** registered views into one point cloud
+   / Gaussian PLY (real COLMAP + gsplat pipeline when installed; depth-fusion
+   fallback otherwise), viewable in the same 3D explorer.
+3. **Corpus semantic search + auto-tagging**
+   ([`semantic.py`](app/services/semantic.py), `POST …/tags`, `GET /api/search`).
+   Zero-shot CLIP tags and text/image search across ready sessions, with a
+   classical colour/texture + keyword fallback.
+4. **Acquisition coverage QA** ([`coverage.py`](app/services/coverage.py),
+   `POST …/coverage-check`). Builds the overlap graph, flags weakly/non-
+   overlapping images, checks single-component connectivity and recommends fixes
+   *before* a long stitch.
+5. **Streaming gigapixel compositor** ([`blending.py`](app/services/blending.py)).
+   For very large canvases the working buffer is **disk-backed (memmap)**, so
+   peak RAM is bounded to a tile plus the cropped result — output is identical to
+   the in-memory path.
+6. **Optional API-key authentication** ([`main.py`](app/main.py)). Set `API_KEY`
+   to require `X-API-Key` on `/api/*`; unset means open (default).
+
+Optional deep upgrades:
+
+```powershell
+py -3 -m pip install open_clip_torch   # CLIP tagging + semantic search
+# COLMAP (binary) + gsplat for true multi-view 3D Gaussian Splatting training
+```
+
+Verification: test suite **47 passed**, including
+[`tests/test_platform_ops.py`](tests/test_platform_ops.py) (stale-job requeue/
+fail, coverage connectivity, multi-view fusion PLY, semantic tagging + keyword
+search, streaming-vs-in-memory equivalence, API-key enforcement).
+
 ## Project Status
 
 This repository is an active research and engineering prototype.
@@ -438,6 +484,11 @@ The agent emits structured JSON logs. Example:
 | AI restore | `POST /api/sessions/{session_id}/restore` · compare at `/compare/{session_id}` |
 | Image-to-3D | `POST /api/sessions/{session_id}/splat` · explorer at `/viewer3d/{session_id}` |
 | Point cloud / splat | `/api/sessions/{session_id}/pointcloud.ply` · `/gaussians.ply` |
+| Multi-view 3D | `POST /api/sessions/{session_id}/reconstruct3d` |
+| Auto-tagging | `POST /api/sessions/{session_id}/tags` |
+| Semantic search | `GET /api/search?q=…` |
+| Coverage QA | `POST /api/sessions/{session_id}/coverage-check` |
+| Queue status | `GET /api/sessions/{session_id}/queue` |
 
 ## Typical Workflow
 

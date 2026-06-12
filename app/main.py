@@ -11,7 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .config import settings
-from .database import Base, SessionLocal, engine, get_db
+from .database import Base, SessionLocal, engine, ensure_schema, get_db
 from .logging_config import configure_logging
 from .models import Annotation, Session as SessionModel, SourceImage
 from .schemas import (
@@ -22,8 +22,12 @@ from .schemas import (
     ChangeDetectRequest,
     ChangeDetectResponse,
     ConditionResponse,
+    CoverageResponse,
     DamageResponse,
     FocusStackResponse,
+    ReconResponse,
+    SearchResponse,
+    TagsResponse,
     PhotometricRequest,
     PhotometricResponse,
     ProcessRequest,
@@ -60,7 +64,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-Base.metadata.create_all(bind=engine)
+ensure_schema()
+
+
+@app.middleware("http")
+async def _api_key_guard(request: Request, call_next):
+    """Optional API-key auth: enforced only when settings.api_key is set."""
+    key = str(settings.api_key or "")
+    if key and request.url.path.startswith(settings.api_prefix):
+        if request.headers.get("X-API-Key") != key:
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse(status_code=401, content={"detail": "Invalid or missing X-API-Key"})
+    return await call_next(request)
+
 
 static_dir = Path(__file__).resolve().parent / "static"
 templates_dir = Path(__file__).resolve().parent / "templates"
@@ -663,6 +680,100 @@ def viewer3d_page(session_id: str, request: Request):
 @app.get("/compare/{session_id}", response_class=HTMLResponse)
 def compare_page(session_id: str, request: Request):
     return templates.TemplateResponse("compare.html", {"request": request, "session_id": session_id})
+
+
+@app.post(f"{settings.api_prefix}/sessions/{{session_id}}/reconstruct3d", response_model=ReconResponse)
+def reconstruct3d_endpoint(session_id: str, db: Session = Depends(get_db)):
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    paths = _session_source_paths(session)
+    if len(paths) < 2:
+        raise HTTPException(status_code=400, detail="Multi-view reconstruction needs at least 2 source images")
+
+    import shutil as _shutil
+
+    from .services.recon3d import reconstruct
+
+    base = output_dir(session_id)
+    result = reconstruct(paths, base)
+    # Surface the multi-view cloud through the existing 3D explorer.
+    if result.pointcloud_path:
+        _shutil.copyfile(result.pointcloud_path, base / "pointcloud.ply")
+    if result.gaussian_path:
+        _shutil.copyfile(result.gaussian_path, base / "gaussians.ply")
+    api = settings.api_prefix
+    return ReconResponse(
+        ok=True,
+        backend=result.backend,
+        num_points=result.num_points,
+        pointcloud_url=f"{api}/sessions/{session_id}/pointcloud.ply" if result.pointcloud_path else None,
+        gaussian_url=f"{api}/sessions/{session_id}/gaussians.ply" if result.gaussian_path else None,
+        explorer_url=f"/viewer3d/{session_id}",
+        note=result.note,
+    )
+
+
+@app.post(f"{settings.api_prefix}/sessions/{{session_id}}/tags", response_model=TagsResponse)
+def auto_tag_endpoint(session_id: str, db: Session = Depends(get_db)):
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.status != "ready":
+        raise HTTPException(status_code=409, detail="Session is not ready yet")
+
+    from .services.semantic import auto_tags, backend as semantic_backend
+
+    bgr = _read_raw_bgr(session, max_dim=1024)
+    tags = auto_tags(bgr)
+    session.tags = ",".join(t["tag"] for t in tags)
+    db.commit()
+    return TagsResponse(backend=semantic_backend(), tags=tags)
+
+
+@app.get(f"{settings.api_prefix}/search", response_model=SearchResponse)
+def semantic_search(q: str, limit: int = 20, db: Session = Depends(get_db)):
+    from .services.semantic import backend as semantic_backend, rank_sessions
+
+    ready = db.query(SessionModel).filter(SessionModel.status == "ready").all()
+    items = []
+    for s in ready:
+        try:
+            items.append((s.id, resolve_optimized_image_path(s), s.tags))
+        except HTTPException:
+            continue
+    results = rank_sessions(q, items, limit=limit)
+    return SearchResponse(backend=semantic_backend(), query=q, results=results)
+
+
+@app.post(f"{settings.api_prefix}/sessions/{{session_id}}/coverage-check", response_model=CoverageResponse)
+def coverage_check_endpoint(session_id: str, db: Session = Depends(get_db)):
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    paths = _session_source_paths(session)
+    if len(paths) < 2:
+        raise HTTPException(status_code=400, detail="Coverage QA needs at least 2 source images")
+
+    from .services.coverage import analyze_coverage
+
+    report = analyze_coverage(paths)
+    return CoverageResponse(**report.to_dict())
+
+
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/queue")
+def queue_status(session_id: str, db: Session = Depends(get_db)):
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    jobs = JobService(db)
+    job = jobs.active_job_for_session(session_id)
+    return {
+        "session_status": session.status,
+        "job_status": job.status if job else None,
+        "queue_position": jobs.queue_position(session_id),
+        "attempts": job.attempts if job else 0,
+    }
 
 
 @app.get(f"{settings.api_prefix}/sessions/{{session_id}}/tiles/{{tile_path:path}}")

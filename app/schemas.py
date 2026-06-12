@@ -146,6 +146,43 @@ class SplatResponse(BaseModel):
     explorer_url: str
 
 
+class ReconResponse(BaseModel):
+    ok: bool
+    backend: str
+    num_points: int
+    pointcloud_url: str | None = None
+    gaussian_url: str | None = None
+    explorer_url: str
+    note: str = ""
+
+
+class TagsResponse(BaseModel):
+    backend: str
+    tags: list[dict]
+
+
+class SearchResult(BaseModel):
+    session_id: str
+    score: float
+
+
+class SearchResponse(BaseModel):
+    backend: str
+    query: str
+    results: list[SearchResult]
+
+
+class CoverageResponse(BaseModel):
+    image_count: int
+    pair_count: int
+    connected: bool
+    components: int
+    verdict: str
+    weak_images: list[dict]
+    isolated_images: list[str]
+    recommendations: list[str]
+
+
 class ProcessRequest(BaseModel):
     mode: str = Field(default="scans", pattern="^(scans|panorama)$")
 

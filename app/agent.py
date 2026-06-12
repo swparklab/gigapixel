@@ -1,11 +1,15 @@
 import argparse
 import logging
+import os
+import socket
+import threading
 import time
+import uuid
 
 from sqlalchemy.orm import Session
 
 from .config import settings
-from .database import Base, SessionLocal, engine
+from .database import SessionLocal, ensure_schema
 from .logging_config import configure_logging
 from .models import ProcessingJob, Session as SessionModel
 from .services.jobs import JobService, utc_now
@@ -13,9 +17,38 @@ from .services.tasks import run_pipeline
 
 logger = logging.getLogger(__name__)
 
+WORKER_ID = f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:6]}"
+
 
 def _claim_next_job(db: Session) -> ProcessingJob | None:
-    return JobService(db).claim_next_job()
+    return JobService(db).claim_next_job(worker_id=WORKER_ID)
+
+
+class _Heartbeat:
+    """Keeps a job's lease alive while a (blocking) pipeline runs."""
+
+    def __init__(self, job_id: int) -> None:
+        self.job_id = job_id
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def _run(self) -> None:
+        interval = max(2, int(settings.job_heartbeat_seconds))
+        while not self._stop.wait(interval):
+            db = SessionLocal()
+            try:
+                JobService(db).heartbeat(self.job_id, WORKER_ID)
+            except Exception:
+                pass
+            finally:
+                db.close()
+
+    def __enter__(self):
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc):
+        self._stop.set()
 
 
 def _process_claimed_job(db: Session, job: ProcessingJob) -> None:
@@ -29,7 +62,8 @@ def _process_claimed_job(db: Session, job: ProcessingJob) -> None:
     try:
         job_id = job.id
         session_id = job.session_id
-        result = run_pipeline(db, session, mode=job.mode)
+        with _Heartbeat(job_id):
+            result = run_pipeline(db, session, mode=job.mode)
         job = jobs.finish_job_from_session_result(job_id, result)
         if not job:
             return
@@ -62,6 +96,9 @@ def _process_claimed_job(db: Session, job: ProcessingJob) -> None:
 def run_once() -> bool:
     db = SessionLocal()
     try:
+        recovered = JobService(db).recover_stale_jobs()
+        if recovered:
+            logger.warning("recovered stale jobs", extra={"recovered": recovered})
         job = _claim_next_job(db)
         if not job:
             return False
@@ -77,7 +114,7 @@ def run_once() -> bool:
 
 
 def run_forever(poll_interval: float) -> None:
-    Base.metadata.create_all(bind=engine)
+    ensure_schema()
     logger.info("agent started", extra={"poll_interval_seconds": poll_interval})
     while True:
         processed = run_once()
@@ -101,7 +138,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    Base.metadata.create_all(bind=engine)
+    ensure_schema()
 
     if args.once:
         processed = run_once()

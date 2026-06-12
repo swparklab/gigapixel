@@ -235,6 +235,11 @@ Important distinction: classic processing uses a queued polling agent. Node work
 | `GET` | `/compare/{session_id}` | Before/After restore comparison page |
 | `POST` | `/api/sessions/{session_id}/splat` | Image-to-3D (point cloud + Gaussian PLY) |
 | `GET` | `/viewer3d/{session_id}` | WebGL 3D explorer |
+| `POST` | `/api/sessions/{session_id}/reconstruct3d` | Multi-view 3D reconstruction |
+| `POST` | `/api/sessions/{session_id}/tags` | CLIP/classical auto-tagging |
+| `GET` | `/api/search?q=` | Corpus semantic search |
+| `POST` | `/api/sessions/{session_id}/coverage-check` | Acquisition coverage QA |
+| `GET` | `/api/sessions/{session_id}/queue` | Queue position + job status |
 | `GET` | `/api/sessions/{session_id}/tiles/{tile_path}` | Serve DZI tile |
 | `GET` | `/api/sessions/{session_id}/annotations` | List annotations |
 | `POST` | `/api/sessions/{session_id}/annotations` | Create annotation |
@@ -332,6 +337,14 @@ Agent-platform modules:
 - `damage_ai.py` — Hessian-ridge crack + CIELAB discolouration detection.
 - `restore.py` — de-colour / de-crack / de-noise restoration.
 - `splat.py` — monocular depth -> point cloud + 3D Gaussian Splatting PLY.
+
+Platform-ops modules:
+
+- `jobs.py` / `agent.py` — leases, heartbeat, stale recovery, retries.
+- `recon3d.py` — multi-view fusion / COLMAP+gsplat orchestration.
+- `semantic.py` — CLIP/classical auto-tags + corpus search.
+- `coverage.py` — overlap-graph acquisition QA.
+- streaming compositor and optional API-key auth live in `blending.py` / `main.py`.
 
 The remaining computer-vision pipeline uses classical algorithms:
 
