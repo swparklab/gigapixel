@@ -18,6 +18,11 @@ This project is designed for digital heritage acquisition and restoration workfl
 - Optional AI / learned feature matching (LoFTR, LightGlue) for high-accuracy registration on low-texture heritage surfaces, with automatic fallback to classical SIFT/ORB.
 - Robust global bundle adjustment (iteratively reweighted Huber least squares) for globally consistent alignment.
 - Tiled multi-band blending that preserves multi-band quality at gigapixel scale instead of degrading to feather compositing.
+- Automatic output quality control (interior-hole, coverage, sharpness, seam, registration, and learned no-reference quality checks) with an `ok`/`warn`/`broken` verdict and a `quality_report.json` sidecar.
+- Automatic repair of enclosed holes via inpainting (optional LaMa deep backend, classical fallback).
+- Deep retrieval-based overlap graph (DINOv2 embeddings) for robust matching of large unordered image sets.
+- SAM-assisted smart annotation and crack/damage detection in the viewer (GrabCut fallback when SAM weights are absent).
+- Optional AI output enhancement (Real-ESRGAN super-resolution / denoise) as a non-archival viewing variant.
 - Raw high-resolution output as BigTIFF.
 - Optimized JPEG output for smaller distribution workflows.
 - Deep Zoom Image generation for web-scale viewing.
@@ -59,6 +64,19 @@ classical pipeline still runs unchanged when the optional AI stack is absent.
 5. **Tiled BigTIFF output** ([`stitching.py`](app/services/stitching.py)).
    Raw output is written as a tiled BigTIFF for efficient partial reads by
    pyvips DZI generation, OpenSeadragon, and GIS tools (`RAW_BIGTIFF_TILED`).
+6. **Output quality control** ([`quality.py`](app/services/quality.py)).
+   Every finished mosaic is inspected for interior holes, low coverage, blur,
+   prominent seams/tears, and high registration RMS, and is classified as
+   `ok` / `warn` / `broken`. The full report — metrics plus located defect
+   regions — is written to `output/quality_report.json` and served at
+   `GET /api/sessions/{id}/quality` (`STITCH_QUALITY_CHECK`).
+7. **Automatic repair of broken regions** ([`repair.py`](app/services/repair.py)).
+   Enclosed holes (gaps surrounded by content, so they cannot be the mosaic's
+   outer background) are reconstructed by inpainting before the outputs are
+   saved. Uses the LaMa deep model when the optional
+   `simple-lama-inpainting` package is installed, otherwise classical Telea
+   inpainting (`STITCH_AUTO_REPAIR`, `STITCH_REPAIR_BACKEND`). Exterior corners
+   of rotated mosaics and holes too large to reconstruct are left untouched.
 
 ### Changed
 
@@ -88,6 +106,47 @@ With an NVIDIA GPU, install a CUDA torch build first (see `requirements-ai.txt`)
 and set `STITCH_MATCHER_DEVICE=cuda`. The robust bundle adjustment, higher-
 resolution registration, and tiled multi-band blending are active by default
 even without the AI stack installed.
+
+## Update Notes — AI Capability Pack
+
+Four additional AI capabilities, each with an always-available classical
+fallback (no hard dependency on the deep models):
+
+1. **Deep retrieval overlap graph** ([`retrieval.py`](app/services/retrieval.py)).
+   For large, *unordered* sets, candidate image pairs are chosen by global
+   descriptor similarity (DINOv2 via `transformers`, or a classical thumbnail
+   embedding) instead of a sequential-neighbour guess, so the overlap graph is
+   correct regardless of capture order. Strategy: `STITCH_PAIR_SELECTION`.
+2. **Learned no-reference quality** ([`iqa.py`](app/services/iqa.py)).
+   QC gains a perceptual quality score — CLIP-IQA via the optional `pyiqa`
+   package, or a sharpness/contrast/colourfulness heuristic. Only the learned
+   score gates the verdict; the heuristic is reported as an informational
+   metric (`STITCH_QUALITY_IQA`).
+3. **SAM smart annotation** ([`segmentation.py`](app/services/segmentation.py)).
+   `POST /api/sessions/{id}/segment` returns the outline of the object under a
+   click (Segment Anything when `SAM_CHECKPOINT` is set, GrabCut otherwise);
+   `POST /api/sessions/{id}/detect-damage` finds crack/damage-like structures.
+   The viewer adds a "Smart annotate" toggle (or Shift+Click) and a
+   "Detect damage" button that draw outlines over the mosaic.
+4. **AI output enhancement** ([`enhance.py`](app/services/enhance.py)).
+   An optional non-archival enhanced variant (`stitched_enhanced.jpg`,
+   `GET .../download/enhanced`) via Real-ESRGAN super-resolution, or Lanczos +
+   denoise + unsharp as fallback. Generative, so OFF by default
+   (`STITCH_ENHANCE`).
+
+Optional installs (any subset; everything degrades gracefully without them):
+
+```powershell
+py -3 -m pip install transformers          # DINOv2 retrieval embeddings
+py -3 -m pip install pyiqa                  # CLIP-IQA learned quality score
+py -3 -m pip install segment-anything       # SAM (also set SAM_CHECKPOINT)
+py -3 -m pip install realesrgan             # Real-ESRGAN enhancement
+```
+
+Verification: test suite **24 passed**, including AI-feature fallback tests
+(retrieval pairing of shuffled duplicates, IQA ordering, click-segmentation,
+damage detection, enhancement scaling) in
+[`tests/test_ai_features.py`](tests/test_ai_features.py).
 
 ## Project Status
 
@@ -257,6 +316,10 @@ The agent emits structured JSON logs. Example:
 | Raw download | `/api/sessions/{session_id}/download/raw` |
 | Optimized download | `/api/sessions/{session_id}/download/optimized` |
 | DZI descriptor | `/api/sessions/{session_id}/dzi` |
+| Quality report | `/api/sessions/{session_id}/quality` |
+| Enhanced download | `/api/sessions/{session_id}/download/enhanced` |
+| Smart segment | `POST /api/sessions/{session_id}/segment` |
+| Damage detection | `POST /api/sessions/{session_id}/detect-damage` |
 
 ## Typical Workflow
 
@@ -328,6 +391,17 @@ Important settings:
 | `STITCH_LENS_AUTO` | `False` | Look up lens distortion from EXIF via `lensfunpy` |
 | `RAW_BIGTIFF_TILED` | `True` | Write a tiled BigTIFF for efficient partial reads |
 | `RAW_BIGTIFF_TILE_SIZE` | `512` | Tile size for tiled BigTIFF output |
+| `STITCH_QUALITY_CHECK` | `True` | Assess the final mosaic and write `quality_report.json` |
+| `STITCH_AUTO_REPAIR` | `True` | Inpaint enclosed holes before saving outputs |
+| `STITCH_REPAIR_BACKEND` | `auto` | `auto`/`classical`/`lama`/`none` inpainting backend |
+| `STITCH_REPAIR_MAX_HOLE_FRACTION` | `0.25` | Refuse to inpaint holes larger than this share of content |
+| `STITCH_PAIR_SELECTION` | `auto` | `auto`/`exhaustive`/`neighbor`/`retrieval` candidate-pair strategy |
+| `STITCH_RETRIEVAL_MODEL` | `auto` | `auto`/`dinov2`/`classical` retrieval embedding backend |
+| `STITCH_QUALITY_IQA` | `True` | Add a learned/heuristic no-reference quality score to QC |
+| `SAM_ENABLED` | `True` | Enable smart-annotation/segmentation endpoints |
+| `SAM_BACKEND` | `auto` | `auto`/`sam`/`classical` segmentation backend |
+| `STITCH_ENHANCE` | `False` | Produce a non-archival AI-enhanced viewing variant |
+| `STITCH_ENHANCE_BACKEND` | `auto` | `auto`/`realesrgan`/`classical` enhancement backend |
 | `LOG_FORMAT` | `json` | Agent/API log format |
 
 ### Highest-accuracy (AI) registration
@@ -344,6 +418,36 @@ py -3 -m pip install -r requirements-ai.txt
 back to classical matching otherwise, so the pipeline runs unchanged without
 the optional dependencies. With an NVIDIA GPU, install a CUDA `torch` build and
 set `STITCH_MATCHER_DEVICE=cuda` (or leave it on `auto`).
+
+### Output quality control and repair
+
+After compositing, every mosaic is inspected and a report is written to
+`data/sessions/{id}/output/quality_report.json` (also served at
+`GET /api/sessions/{id}/quality`):
+
+```json
+{
+  "verdict": "warn",
+  "issues": ["interior holes detected (2 regions)"],
+  "metrics": {"coverage_ratio": 0.998, "hole_count": 2, "sharpness": 312.4,
+              "seam_score": 0.12, "registration_rms": 0.69},
+  "holes": [{"x": 0.41, "y": 0.33, "w": 0.02, "h": 0.03, "area_fraction": 0.0006}],
+  "repaired": true,
+  "repair_actions": ["inpaint_holes: 2 region(s), 18342 px, backend=classical"]
+}
+```
+
+`verdict` is `ok`, `warn`, or `broken`. When `STITCH_AUTO_REPAIR` is on,
+enclosed holes are inpainted before the BigTIFF/JPEG/DZI are written, so the
+saved outputs already contain the corrected pixels. For the best inpainting on
+large or structured gaps, install the optional LaMa backend:
+
+```powershell
+py -3 -m pip install simple-lama-inpainting
+```
+
+With it installed and `STITCH_REPAIR_BACKEND=auto`, repair uses LaMa and falls
+back to classical inpainting if the model cannot run.
 
 ## Data And Outputs
 

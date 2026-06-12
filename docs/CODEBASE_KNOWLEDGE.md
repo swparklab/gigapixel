@@ -216,6 +216,10 @@ Important distinction: classic processing uses a queued polling agent. Node work
 | `POST` | `/api/sessions/{session_id}/images` | Upload source images |
 | `POST` | `/api/sessions/{session_id}/process` | Enqueue background processing |
 | `GET` | `/api/sessions/{session_id}/dzi` | Serve DZI descriptor |
+| `GET` | `/api/sessions/{session_id}/quality` | Serve the stitch quality report (JSON) |
+| `GET` | `/api/sessions/{session_id}/download/enhanced` | Download the AI-enhanced variant |
+| `POST` | `/api/sessions/{session_id}/segment` | SAM/GrabCut click-to-segment outline |
+| `POST` | `/api/sessions/{session_id}/detect-damage` | Crack/damage region detection |
 | `GET` | `/api/sessions/{session_id}/tiles/{tile_path}` | Serve DZI tile |
 | `GET` | `/api/sessions/{session_id}/annotations` | List annotations |
 | `POST` | `/api/sessions/{session_id}/annotations` | Create annotation |
@@ -260,6 +264,10 @@ flowchart TD
 9. `blend_full_resolution()` performs full-resolution blending:
    - For smaller canvases, it prepares all warped ROIs, applies exposure compensation, graph-cut seams, and multiband blending.
    - For larger canvases, it falls back to streaming feather blending.
+9.5. `assess_stitch_quality()` inspects the mosaic (interior holes, coverage,
+   sharpness, seams, registration RMS) and, when `stitch_auto_repair` is on,
+   `repair_stitch()` inpaints enclosed holes. A `quality_report.json` sidecar is
+   written to the session output directory.
 10. `save_stitched_variants()` saves BigTIFF raw output and optimized JPEG output.
 11. `generate_dzi()` creates Deep Zoom tiles through `pyvips` when available, otherwise through Pillow.
 12. If the modular scans pipeline fails, OpenCV `Stitcher` fallback is attempted.
@@ -281,6 +289,15 @@ adjustment, warping, and blending as the classical path. The model is loaded
 lazily and the whole module degrades gracefully: if the optional dependencies
 or weights are missing, or a run yields too few correspondences to connect the
 overlap graph, the pipeline falls back to classical SIFT/ORB matching.
+
+Additional optional AI capabilities, each with a classical fallback:
+
+- `retrieval.py` — DINOv2 (or classical thumbnail) global embeddings choose
+  candidate image pairs for large unordered sets.
+- `iqa.py` — CLIP-IQA (or heuristic) no-reference quality score feeding QC.
+- `segmentation.py` — Segment Anything (or GrabCut) click-segmentation plus
+  classical crack/damage detection for viewer annotation.
+- `enhance.py` — Real-ESRGAN (or Lanczos+denoise) non-archival enhanced variant.
 
 The remaining computer-vision pipeline uses classical algorithms:
 

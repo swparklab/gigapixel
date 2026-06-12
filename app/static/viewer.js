@@ -435,10 +435,131 @@ async function initViewer() {
     pendingPoint = { x: imagePoint.x, y: imagePoint.y };
     updatePendingPointText();
     updateSaveButtonState();
+    if (smartMode || (evt.originalEvent && evt.originalEvent.shiftKey)) {
+      evt.preventDefaultAction = true;
+      requestSegment(imagePoint).catch(() => {});
+    }
   });
 
+  injectSmartControls();
   bindViewerToolbar();
   await loadAnnotations();
+}
+
+// --- AI smart annotation (Segment Anything / GrabCut) ----------------------
+let smartMode = false;
+
+function injectSmartControls() {
+  if (document.getElementById("smartAnnotateBtn")) return;
+  const panel = document.createElement("div");
+  panel.className = "smart-annotate-panel";
+  panel.style.cssText =
+    "position:absolute;top:12px;left:12px;z-index:30;display:flex;gap:6px;flex-wrap:wrap;";
+
+  const segBtn = document.createElement("button");
+  segBtn.id = "smartAnnotateBtn";
+  segBtn.type = "button";
+  segBtn.textContent = currentLang() === "ko" ? "🪄 스마트 주석" : "🪄 Smart annotate";
+  segBtn.title = currentLang() === "ko" ? "켠 뒤 객체를 클릭하면 AI가 윤곽을 분할합니다 (Shift+클릭도 가능)" : "Toggle, then click an object to segment its outline (or Shift+Click)";
+  segBtn.style.cssText = "padding:6px 10px;border-radius:6px;cursor:pointer;border:1px solid #444;background:#1f2937;color:#fff;";
+  segBtn.addEventListener("click", () => {
+    smartMode = !smartMode;
+    segBtn.style.background = smartMode ? "#2563eb" : "#1f2937";
+  });
+
+  const dmgBtn = document.createElement("button");
+  dmgBtn.id = "detectDamageBtn";
+  dmgBtn.type = "button";
+  dmgBtn.textContent = currentLang() === "ko" ? "🩹 손상 탐지" : "🩹 Detect damage";
+  dmgBtn.style.cssText = segBtn.style.cssText + "background:#374151;";
+  dmgBtn.addEventListener("click", () => detectDamageInView().catch(() => {}));
+
+  panel.appendChild(segBtn);
+  panel.appendChild(dmgBtn);
+  const host = document.getElementById("openseadragon") || document.body;
+  if (getComputedStyle(host).position === "static") host.style.position = "relative";
+  host.appendChild(panel);
+}
+
+function _polygonCentroid(points) {
+  let sx = 0;
+  let sy = 0;
+  points.forEach((p) => {
+    sx += p[0];
+    sy += p[1];
+  });
+  return { x: sx / points.length, y: sy / points.length };
+}
+
+function _addImageOverlay(points, color) {
+  if (!points || points.length < 3) return;
+  const xs = points.map((p) => p[0]);
+  const ys = points.map((p) => p[1]);
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  const w = Math.max(...xs) - minX || 1;
+  const h = Math.max(...ys) - minY || 1;
+  const svgNs = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNs, "svg");
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  svg.setAttribute("preserveAspectRatio", "none");
+  svg.style.cssText = "width:100%;height:100%;overflow:visible;pointer-events:none;";
+  const poly = document.createElementNS(svgNs, "polygon");
+  poly.setAttribute("points", points.map((p) => `${p[0] - minX},${p[1] - minY}`).join(" "));
+  poly.setAttribute("fill", color + "33");
+  poly.setAttribute("stroke", color);
+  poly.setAttribute("stroke-width", String(Math.max(1, w / 200)));
+  svg.appendChild(poly);
+  const rect = viewer.viewport.imageToViewportRectangle(
+    new OpenSeadragon.Rect(minX, minY, w, h)
+  );
+  viewer.addOverlay({ element: svg, location: rect });
+}
+
+async function requestSegment(imagePoint) {
+  const res = await fetch(`/api/sessions/${sessionId}/segment`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ point_x: imagePoint.x, point_y: imagePoint.y }),
+  });
+  if (!res.ok) return;
+  const data = await res.json();
+  if (!data.polygon || !data.polygon.length) return;
+  _addImageOverlay(data.polygon, "#22d3ee");
+  const c = _polygonCentroid(data.polygon);
+  pendingPoint = { x: c.x, y: c.y };
+  if (annTextEl && !annTextEl.value.trim()) {
+    annTextEl.value = currentLang() === "ko" ? `AI 분할 (${data.backend})` : `AI segment (${data.backend})`;
+  }
+  updatePendingPointText();
+  updateSaveButtonState();
+}
+
+async function detectDamageInView() {
+  const bounds = viewer.viewport.viewportToImageRectangle(viewer.viewport.getBounds());
+  const res = await fetch(`/api/sessions/${sessionId}/detect-damage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      box_x: Math.max(0, bounds.x),
+      box_y: Math.max(0, bounds.y),
+      box_w: bounds.width,
+      box_h: bounds.height,
+    }),
+  });
+  if (!res.ok) return;
+  const data = await res.json();
+  (data.regions || []).forEach((r) => {
+    _addImageOverlay(
+      [
+        [r.x, r.y],
+        [r.x + r.w, r.y],
+        [r.x + r.w, r.y + r.h],
+        [r.x, r.y + r.h],
+      ],
+      "#f43f5e"
+    );
+  });
 }
 
 function downloadRaw() {

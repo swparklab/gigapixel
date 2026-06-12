@@ -19,21 +19,25 @@ from .schemas import (
     AnnotationRead,
     AcquisitionPlanRead,
     AcquisitionPlanRequest,
+    DamageResponse,
     ProcessRequest,
     ProcessResponse,
+    SegmentRequest,
+    SegmentResponse,
     SessionCreate,
     SessionRead,
 )
 from .services.exporter import (
     build_download_filename,
     media_type_for_image,
+    resolve_enhanced_image_path,
     resolve_optimized_image_path,
     resolve_raw_image_path,
 )
 from .services.acquisition import build_acquisition_plan
 from .services.node_runner import WorkflowExecutionError, execute_graph
 from .services.jobs import JobService
-from .services.storage import node_upload_dir, node_upload_path, upload_dir
+from .services.storage import node_upload_dir, node_upload_path, output_dir, upload_dir
 
 configure_logging(settings.log_level, settings.log_format)
 
@@ -74,6 +78,43 @@ NODE_LIBRARY = [
     {"type": "workflow/run_pipeline", "title": "RunPipeline", "category": "workflow"},
     {"type": "workflow/download", "title": "Download", "category": "workflow"},
 ]
+
+
+def _load_region(raw_path: Path, payload: SegmentRequest) -> tuple["object", tuple[int, int]]:
+    """Crop a bounded region of the (gigapixel) raw mosaic for segmentation.
+
+    Returns (BGR ndarray, (origin_x, origin_y)). Cropping is lazy so the full
+    gigapixel image is never decoded into memory.
+    """
+    import numpy as np
+    import cv2
+    from PIL import Image
+
+    Image.MAX_IMAGE_PIXELS = None
+    max_region = max(256, int(settings.sam_max_region))
+    with Image.open(raw_path) as source:
+        width, height = source.size
+        if None not in (payload.box_x, payload.box_y, payload.box_w, payload.box_h):
+            margin = 32
+            x0 = int(payload.box_x) - margin
+            y0 = int(payload.box_y) - margin
+            x1 = int(payload.box_x + payload.box_w) + margin
+            y1 = int(payload.box_y + payload.box_h) + margin
+        else:
+            cx = int(payload.point_x if payload.point_x is not None else width / 2)
+            cy = int(payload.point_y if payload.point_y is not None else height / 2)
+            half = max_region // 2
+            x0, y0, x1, y1 = cx - half, cy - half, cx + half, cy + half
+        x0 = max(0, min(x0, width - 1))
+        y0 = max(0, min(y0, height - 1))
+        x1 = max(x0 + 1, min(x1, width))
+        y1 = max(y0 + 1, min(y1, height))
+        # Cap the crop so segmentation stays bounded.
+        x1 = min(x1, x0 + max_region)
+        y1 = min(y1, y0 + max_region)
+        region = source.crop((x0, y0, x1, y1)).convert("RGB")
+    bgr = cv2.cvtColor(np.asarray(region), cv2.COLOR_RGB2BGR)
+    return bgr, (x0, y0)
 
 
 def _serialize_session(session: SessionModel, request: Request, db: Session) -> SessionRead:
@@ -308,6 +349,19 @@ def get_dzi_descriptor(session_id: str, db: Session = Depends(get_db)):
     return FileResponse(path, media_type="application/xml")
 
 
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/quality")
+def get_quality_report(session_id: str, db: Session = Depends(get_db)):
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    report_path = output_dir(session_id) / "quality_report.json"
+    if not report_path.exists():
+        raise HTTPException(status_code=404, detail="Quality report not available")
+
+    return FileResponse(report_path, media_type="application/json")
+
+
 @app.get(f"{settings.api_prefix}/sessions/{{session_id}}/tiles/{{tile_path:path}}")
 def get_tile(session_id: str, tile_path: str, db: Session = Depends(get_db)):
     session = db.get(SessionModel, session_id)
@@ -384,6 +438,76 @@ def download_optimized_image(session_id: str, db: Session = Depends(get_db)):
         media_type=media_type_for_image(stitched_path),
         filename=image_name,
     )
+
+
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/download/enhanced")
+def download_enhanced_image(session_id: str, db: Session = Depends(get_db)):
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.status != "ready":
+        raise HTTPException(status_code=409, detail="Session is not ready yet")
+
+    stitched_path = resolve_enhanced_image_path(session)
+    image_name = build_download_filename(session, variant="enhanced", file_path=stitched_path)
+
+    return FileResponse(
+        stitched_path,
+        media_type=media_type_for_image(stitched_path),
+        filename=image_name,
+    )
+
+
+@app.post(f"{settings.api_prefix}/sessions/{{session_id}}/segment", response_model=SegmentResponse)
+def segment_region_endpoint(session_id: str, payload: SegmentRequest, db: Session = Depends(get_db)):
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not bool(settings.sam_enabled):
+        raise HTTPException(status_code=503, detail="Smart annotation is disabled")
+    if session.status != "ready":
+        raise HTTPException(status_code=409, detail="Session is not ready yet")
+
+    from .services.segmentation import segment_region
+
+    raw_path = resolve_raw_image_path(session)
+    crop, origin = _load_region(raw_path, payload)
+    point = None
+    if payload.point_x is not None and payload.point_y is not None:
+        point = (payload.point_x - origin[0], payload.point_y - origin[1])
+    box = None
+    if None not in (payload.box_x, payload.box_y, payload.box_w, payload.box_h):
+        box = (
+            payload.box_x - origin[0],
+            payload.box_y - origin[1],
+            payload.box_x + payload.box_w - origin[0],
+            payload.box_y + payload.box_h - origin[1],
+        )
+
+    polygon, backend = segment_region(crop, point, box)
+    mapped = [[float(px + origin[0]), float(py + origin[1])] for px, py in polygon]
+    return SegmentResponse(backend=backend, polygon=mapped)
+
+
+@app.post(f"{settings.api_prefix}/sessions/{{session_id}}/detect-damage", response_model=DamageResponse)
+def detect_damage_endpoint(session_id: str, payload: SegmentRequest, db: Session = Depends(get_db)):
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not bool(settings.sam_enabled):
+        raise HTTPException(status_code=503, detail="Smart annotation is disabled")
+    if session.status != "ready":
+        raise HTTPException(status_code=409, detail="Session is not ready yet")
+
+    from .services.segmentation import detect_damage
+
+    raw_path = resolve_raw_image_path(session)
+    crop, origin = _load_region(raw_path, payload)
+    regions = detect_damage(crop)
+    for region in regions:
+        region["x"] += int(origin[0])
+        region["y"] += int(origin[1])
+    return DamageResponse(backend="classical", regions=regions)
 
 
 @app.post(f"{settings.api_prefix}/sessions/{{session_id}}/annotations", response_model=AnnotationRead)

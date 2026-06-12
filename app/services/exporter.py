@@ -83,6 +83,13 @@ def resolve_optimized_image_path(session: Session) -> Path:
     return optimized_path
 
 
+def resolve_enhanced_image_path(session: Session) -> Path:
+    path = output_dir(session.id) / "stitched_enhanced.jpg"
+    if path.exists() and path.is_file():
+        return path
+    raise HTTPException(status_code=404, detail="Enhanced image is not available")
+
+
 def build_download_filename(session: Session, variant: str, file_path: Path) -> str:
     ext = file_path.suffix.lower() or ".jpg"
     return f"{sanitize_filename(session.name)}_{session.id}_{variant}{ext}"

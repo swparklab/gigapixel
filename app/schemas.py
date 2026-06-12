@@ -35,6 +35,34 @@ class AnnotationRead(BaseModel):
     created_at: dt.datetime
 
 
+class SegmentRequest(BaseModel):
+    # All coordinates are in full-resolution mosaic pixels.
+    point_x: float | None = None
+    point_y: float | None = None
+    box_x: float | None = None
+    box_y: float | None = None
+    box_w: float | None = None
+    box_h: float | None = None
+
+
+class SegmentResponse(BaseModel):
+    backend: str
+    polygon: list[list[float]]
+
+
+class DamageRegion(BaseModel):
+    x: int
+    y: int
+    w: int
+    h: int
+    length: int
+
+
+class DamageResponse(BaseModel):
+    backend: str
+    regions: list[DamageRegion]
+
+
 class ProcessRequest(BaseModel):
     mode: str = Field(default="scans", pattern="^(scans|panorama)$")
 

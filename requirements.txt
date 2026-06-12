@@ -25,3 +25,12 @@ kornia-rs>=0.1.1
 # pyvips>=2.2.2
 # Optional (automatic EXIF-based lens distortion correction):
 # lensfunpy>=1.14.0
+# Optional (LaMa deep inpainting for repairing large/structured holes;
+# classical inpainting is used automatically when this is absent):
+# simple-lama-inpainting>=0.1.2
+#
+# Optional AI capability pack (each has an always-available classical fallback):
+# transformers>=4.40.0          # DINOv2 embeddings for retrieval-based overlap graph
+# pyiqa>=0.1.11                 # CLIP-IQA learned no-reference quality score (QC)
+# segment-anything>=1.0         # SAM click-segmentation (needs a checkpoint; set SAM_CHECKPOINT)
+# realesrgan>=0.3.0             # Real-ESRGAN super-resolution for the enhanced variant

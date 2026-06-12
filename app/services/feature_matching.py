@@ -336,10 +336,24 @@ def pair_candidates(count: int):
             yield left, right
 
 
-def _classical_pair_matches(features: list[FeatureSet], log: LogFn = _noop) -> list[PairMatch]:
+def _resolve_candidates(image_paths: list[Path], count: int, log: LogFn) -> list[tuple[int, int]]:
+    if image_paths is not None and len(image_paths) == count:
+        try:
+            from .retrieval import resolve_candidate_pairs
+
+            return resolve_candidate_pairs(image_paths, log)
+        except Exception as exc:
+            log(f"[match] candidate selection fell back to default ({exc})")
+    return list(pair_candidates(count))
+
+
+def _classical_pair_matches(
+    features: list[FeatureSet], log: LogFn = _noop, image_paths: list[Path] | None = None
+) -> list[PairMatch]:
     matches: list[PairMatch] = []
     tested = 0
-    for left_idx, right_idx in pair_candidates(len(features)):
+    candidates = _resolve_candidates(image_paths or [f.path for f in features], len(features), log)
+    for left_idx, right_idx in candidates:
         tested += 1
         left = features[left_idx]
         right = features[right_idx]
@@ -383,7 +397,7 @@ def _deep_pair_matches(
 
         matches: list[PairMatch] = []
         tested = 0
-        for left_idx, right_idx in pair_candidates(len(features)):
+        for left_idx, right_idx in _resolve_candidates(image_paths, len(features), log):
             tested += 1
             corr = matcher.match(deep_images[left_idx], deep_images[right_idx])
             if corr is None or len(corr.points_left) < int(settings.stitch_planar_min_inliers):
@@ -423,4 +437,4 @@ def estimate_pair_matches(
         deep = _deep_pair_matches(features, image_paths, log)
         if deep is not None:
             return deep
-    return _classical_pair_matches(features, log)
+    return _classical_pair_matches(features, log, image_paths)

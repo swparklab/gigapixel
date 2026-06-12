@@ -97,6 +97,81 @@ class Settings(BaseSettings):
     raw_bigtiff_tiled: bool = True
     raw_bigtiff_tile_size: int = 512
 
+    # --- Stitch quality assessment (QC) --------------------------------------
+    # Inspect the final mosaic for defects (interior holes, low coverage, blur,
+    # seam/ghost discontinuities) and emit a quality_report.json sidecar.
+    stitch_quality_check: bool = True
+    # Long edge (px) the analysis runs at; defects are located here then mapped
+    # back to full resolution for repair.
+    stitch_quality_max_dim: int = 6000
+    # A pixel whose max channel value is <= this is treated as unfilled/empty.
+    stitch_quality_empty_threshold: int = 6
+    # Coverage (filled fraction of the content bbox) below this is a warning.
+    stitch_quality_min_coverage: float = 0.985
+    # Interior-hole area (fraction of content) thresholds for warn/fail.
+    stitch_quality_hole_area_warn: float = 0.0005
+    stitch_quality_hole_area_fail: float = 0.02
+    # Laplacian-variance sharpness below this flags a blurred/ghosted result.
+    stitch_quality_min_sharpness: float = 4.0
+    # Registration RMS (px) thresholds for warn/fail when available.
+    stitch_quality_rms_warn: float = 3.0
+    stitch_quality_rms_fail: float = 8.0
+
+    # --- Automatic repair of broken regions ----------------------------------
+    stitch_auto_repair: bool = True
+    # Inpainting backend: auto | classical | lama | none.
+    # "auto" uses a deep model (LaMa) when available, else classical inpainting.
+    stitch_repair_backend: str = "auto"
+    # Refuse to inpaint when interior holes exceed this fraction of content
+    # (too large to reconstruct credibly).
+    stitch_repair_max_hole_fraction: float = 0.25
+    # Dilation (px) applied to hole masks before inpainting.
+    stitch_repair_dilate: int = 6
+    # Classical inpainting radius (px).
+    stitch_repair_inpaint_radius: int = 6
+
+    # --- Deep retrieval overlap graph ----------------------------------------
+    # How candidate image pairs are chosen before expensive matching.
+    #   auto | exhaustive | neighbor | retrieval
+    # "auto" picks exhaustive for small sets, deep retrieval for large/unordered
+    # sets, and the neighbor window otherwise.
+    stitch_pair_selection: str = "auto"
+    # Deep global-descriptor backend used for retrieval: auto | dinov2 | classical.
+    # "classical" (thumbnail color+gradient embedding) always works; "dinov2"
+    # upgrades to learned embeddings when torch is available.
+    stitch_retrieval_model: str = "auto"
+    # Top-K most-similar neighbours retrieved per image.
+    stitch_retrieval_top_k: int = 8
+    # In "auto", use retrieval once the set has at least this many images.
+    stitch_retrieval_min_images: int = 12
+
+    # --- Learned no-reference image quality (QC) -----------------------------
+    stitch_quality_iqa: bool = True
+    # auto | pyiqa | classical. "auto" uses pyiqa (CLIP-IQA) when installed.
+    stitch_quality_iqa_backend: str = "auto"
+    # Perceptual score (0..1, higher is better) below this adds a warning.
+    stitch_quality_iqa_warn: float = 0.30
+
+    # --- SAM smart annotation ------------------------------------------------
+    sam_enabled: bool = True
+    # auto | sam | classical. "classical" uses GrabCut so click-segmentation
+    # works without model weights; "sam" uses Segment Anything when available.
+    sam_backend: str = "auto"
+    sam_model_type: str = "vit_h"
+    sam_checkpoint: str = ""  # filesystem path to the SAM checkpoint
+    # Max crop (px) sent to the segmenter around the requested region.
+    sam_max_region: int = 2048
+
+    # --- AI output enhancement (super-resolution / denoise) ------------------
+    # Generative; OFF by default. Produces a non-archival "enhanced" variant.
+    stitch_enhance: bool = False
+    # auto | realesrgan | classical. "classical" = Lanczos upscale + denoise.
+    stitch_enhance_backend: str = "auto"
+    stitch_enhance_scale: int = 2
+    stitch_enhance_denoise: bool = True
+    # Skip enhancement when the output already exceeds this many pixels.
+    stitch_enhance_max_pixels: int = 600_000_000
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
