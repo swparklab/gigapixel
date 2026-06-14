@@ -250,7 +250,12 @@ Important distinction: classic processing uses a queued polling agent. Node work
 | `GET` | `/api/sessions/{session_id}/iiif/annotations` | IIIF AnnotationPage export |
 | `GET` | `/report/{session_id}` | Printable condition report |
 | `GET` | `/relief/{session_id}` | Raking-light (RTI) relief viewer |
-| `GET` | `/api/sessions/{session_id}/archive` | BagIt archival package |
+| `GET` | `/api/sessions/{session_id}/archive` | BagIt archival package (optional AES encryption) |
+| `POST` | `/api/sessions/{session_id}/watermark` | Embed per-recipient invisible watermark |
+| `POST` | `/api/sessions/{session_id}/verify-watermark` | Trace watermark + tamper detection |
+| `GET` | `/api/sessions/{session_id}/pid` | ARK persistent identifier |
+| `GET` | `/api/sessions/{session_id}/metadata.xml` | LIDO / Dublin Core XML export |
+| `GET` | `/sync` | Synchronized two-session comparison viewer |
 | `GET` | `/api/sessions/{session_id}/tiles/{tile_path}` | Serve DZI tile |
 | `GET` | `/api/sessions/{session_id}/annotations` | List annotations |
 | `POST` | `/api/sessions/{session_id}/annotations` | Create annotation |

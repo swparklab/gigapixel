@@ -20,6 +20,7 @@ class SessionRead(BaseModel):
     share_url: str
     tags: str | None = None
     pixels_per_mm: float | None = None
+    pid: str | None = None
 
 
 class SessionSummary(BaseModel):
@@ -257,7 +258,7 @@ class UpscaleResponse(BaseModel):
 
 class To3DRequest(BaseModel):
     representation: str = Field(
-        default="splat", pattern="^(splat|pointcloud|gaussian|mesh|depth|normals|all)$"
+        default="splat", pattern="^(splat|pointcloud|gaussian|mesh|depth|normals|material|all)$"
     )
 
 
@@ -267,6 +268,28 @@ class To3DResponse(BaseModel):
     depth_backend: str
     num_points: int
     artifacts: dict[str, str]
+
+
+class WatermarkRequest(BaseModel):
+    recipient: str = Field(min_length=1, max_length=200)
+    identifier: str | None = Field(default=None, max_length=200)
+
+
+class WatermarkResponse(BaseModel):
+    ok: bool
+    payload: str
+    token: str
+    phash: str
+    download_url: str
+
+
+class VerifyResponse(BaseModel):
+    watermark_found: bool
+    recipient: str | None = None
+    payload: str | None = None
+    match_fraction: float
+    tampered: bool
+    phash_distance: int
 
 
 class ProcessRequest(BaseModel):

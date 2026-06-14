@@ -245,6 +245,16 @@ class Settings(BaseSettings):
     #   auto | trellis | hunyuan3d | depth (depth = relief surface, always works)
     to3d_backend: str = "depth"
 
+    # --- Rights protection / authentication (KOCCA pillar) -------------------
+    # Invisible DCT watermark that embeds a per-recipient identifier, plus a
+    # perceptual-hash + SHA-256 tamper-authentication record.
+    watermark_strength: float = 9.0       # QIM quantisation step (higher = more robust/visible)
+    watermark_bits: int = 64
+    # Persistent identifier (ARK) Name Assigning Authority Number.
+    pid_naan: str = "99999"
+    # Encrypted archive key derivation rounds (PBKDF2-HMAC-SHA256).
+    archive_encrypt_iterations: int = 200_000
+
     # --- Job queue robustness ------------------------------------------------
     job_lease_seconds: int = 600          # a claimed job is "stale" past this
     job_heartbeat_seconds: int = 15       # worker heartbeat cadence

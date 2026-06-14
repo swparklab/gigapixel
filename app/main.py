@@ -49,6 +49,9 @@ from .schemas import (
     To3DResponse,
     UpscaleRequest,
     UpscaleResponse,
+    VerifyResponse,
+    WatermarkRequest,
+    WatermarkResponse,
 )
 from .services.exporter import (
     build_download_filename,
@@ -169,6 +172,7 @@ def _serialize_session(session: SessionModel, request: Request, db: Session) -> 
         share_url=share_url,
         tags=session.tags,
         pixels_per_mm=session.pixels_per_mm,
+        pid=session.pid,
     )
 
 
@@ -349,10 +353,10 @@ def get_iiif_annotations(session_id: str, db: Session = Depends(get_db)):
 
 
 @app.get(f"{settings.api_prefix}/sessions/{{session_id}}/archive")
-def download_archive(session_id: str, db: Session = Depends(get_db)):
+def download_archive(session_id: str, encrypt: bool = False, passphrase: str = "", db: Session = Depends(get_db)):
     from fastapi import Response
 
-    from .services.archive import build_bagit
+    from .services.archive import build_bagit, encrypt_package
 
     session = db.get(SessionModel, session_id)
     if not session:
@@ -360,6 +364,16 @@ def download_archive(session_id: str, db: Session = Depends(get_db)):
     if session.status != "ready":
         raise HTTPException(status_code=409, detail="Session is not ready yet")
     data = build_bagit(session_id, session.name, output_dir(session_id))
+    if encrypt:
+        if not passphrase:
+            raise HTTPException(status_code=400, detail="passphrase is required for an encrypted package")
+        try:
+            data = encrypt_package(data, passphrase)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc))
+        name = build_download_filename(session, variant="bagit", file_path=Path("x.zip")) + ".enc"
+        return Response(content=data, media_type="application/octet-stream",
+                        headers={"Content-Disposition": f'attachment; filename="{name}"'})
     name = build_download_filename(session, variant="bagit", file_path=Path("x.zip"))
     return Response(
         content=data, media_type="application/zip",
@@ -405,6 +419,177 @@ def report_page(session_id: str, request: Request, db: Session = Depends(get_db)
 @app.get("/relief/{session_id}", response_class=HTMLResponse)
 def relief_page(session_id: str, request: Request):
     return templates.TemplateResponse("relief.html", {"request": request, "session_id": session_id})
+
+
+@app.get("/sync", response_class=HTMLResponse)
+def sync_compare_page(request: Request, a: str = "", b: str = ""):
+    return templates.TemplateResponse("sync.html", {"request": request, "a": a, "b": b})
+
+
+def _ensure_pid(session: SessionModel, db: Session) -> str:
+    """Assign a stable ARK persistent identifier if the session lacks one."""
+    if not session.pid:
+        session.pid = f"ark:/{settings.pid_naan}/g{session.id.replace('-', '')[:14]}"
+        db.commit()
+    return session.pid
+
+
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/pid")
+def get_pid(session_id: str, db: Session = Depends(get_db)):
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"pid": _ensure_pid(session, db)}
+
+
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/metadata.xml")
+def get_metadata_xml(session_id: str, format: str = "lido", db: Session = Depends(get_db)):
+    import json as _json
+    from fastapi import Response
+    from xml.sax.saxutils import escape
+
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    try:
+        meta = _json.loads(session.metadata_json) if session.metadata_json else {}
+    except Exception:
+        meta = {}
+    pid = _ensure_pid(session, db)
+
+    def e(v):
+        return escape("" if v is None else str(v))
+
+    if format.lower() == "dc":
+        xml = (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<oai_dc:dc xmlns:oai_dc="http://www.openarchives.org/OAI/2.0/oai_dc/" '
+            'xmlns:dc="http://purl.org/dc/elements/1.1/">\n'
+            f"  <dc:identifier>{e(pid)}</dc:identifier>\n"
+            f"  <dc:title>{e(meta.get('title') or session.name)}</dc:title>\n"
+            f"  <dc:creator>{e(meta.get('creator'))}</dc:creator>\n"
+            f"  <dc:date>{e(meta.get('date'))}</dc:date>\n"
+            f"  <dc:format>{e(meta.get('material'))}</dc:format>\n"
+            f"  <dc:description>{e(meta.get('description'))}</dc:description>\n"
+            f"  <dc:source>{e(meta.get('repository'))}</dc:source>\n"
+            f"  <dc:rights>{e(meta.get('rights'))}</dc:rights>\n"
+            f"  <dc:subject>{e(meta.get('subject'))}</dc:subject>\n"
+            "</oai_dc:dc>\n"
+        )
+    else:  # LIDO 1.0 (minimal)
+        xml = (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<lido:lido xmlns:lido="http://www.lido-schema.org">\n'
+            f"  <lido:lidoRecID lido:type=\"local\">{e(pid)}</lido:lidoRecID>\n"
+            "  <lido:descriptiveMetadata xml:lang=\"en\">\n"
+            "    <lido:objectClassificationWrap><lido:objectWorkTypeWrap><lido:objectWorkType>"
+            f"<lido:term>{e(meta.get('material'))}</lido:term>"
+            "</lido:objectWorkType></lido:objectWorkTypeWrap></lido:objectClassificationWrap>\n"
+            "    <lido:objectIdentificationWrap><lido:titleWrap><lido:titleSet><lido:appellationValue>"
+            f"{e(meta.get('title') or session.name)}"
+            "</lido:appellationValue></lido:titleSet></lido:titleWrap>\n"
+            "      <lido:repositoryWrap><lido:repositorySet><lido:repositoryName><lido:legalBodyName>"
+            f"<lido:appellationValue>{e(meta.get('repository'))}</lido:appellationValue>"
+            "</lido:legalBodyName></lido:repositoryName>"
+            f"<lido:workID>{e(meta.get('accession_number'))}</lido:workID>"
+            "</lido:repositorySet></lido:repositoryWrap></lido:objectIdentificationWrap>\n"
+            "  </lido:descriptiveMetadata>\n"
+            "</lido:lido>\n"
+        )
+    return Response(content=xml, media_type="application/xml")
+
+
+@app.post(f"{settings.api_prefix}/sessions/{{session_id}}/watermark", response_model=WatermarkResponse)
+def watermark_endpoint(session_id: str, payload: WatermarkRequest, db: Session = Depends(get_db)):
+    import datetime as _dt
+    import hashlib
+    import json as _json
+
+    import cv2
+
+    from .services.watermark import embed_watermark, perceptual_hash
+
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.status != "ready":
+        raise HTTPException(status_code=409, detail="Session is not ready yet")
+
+    pid = _ensure_pid(session, db)
+    bgr = _read_raw_bgr(session, max_dim=4096)
+    wm_payload = f"{pid}|{payload.recipient}|{payload.identifier or ''}"
+    watermarked = embed_watermark(bgr, wm_payload)
+    base = output_dir(session_id)
+    out = base / "stitched_watermarked.jpg"
+    cv2.imencode(".jpg", watermarked, [cv2.IMWRITE_JPEG_QUALITY, 95])[1].tofile(str(out))
+
+    phash = perceptual_hash(watermarked)
+    token = hashlib.sha256(wm_payload.encode()).hexdigest()[:12]
+    rights_path = base / "rights.json"
+    try:
+        registry = _json.loads(rights_path.read_text(encoding="utf-8")) if rights_path.exists() else []
+    except Exception:
+        registry = []
+    registry.append({
+        "payload": wm_payload, "recipient": payload.recipient, "identifier": payload.identifier,
+        "token": token, "phash": phash, "sha256": hashlib.sha256(out.read_bytes()).hexdigest(),
+        "issued_utc": _dt.datetime.now(_dt.UTC).isoformat(),
+    })
+    rights_path.write_text(_json.dumps(registry, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return WatermarkResponse(
+        ok=True, payload=wm_payload, token=token, phash=phash,
+        download_url=f"{settings.api_prefix}/sessions/{session_id}/download/watermarked",
+    )
+
+
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/download/watermarked")
+def download_watermarked(session_id: str, db: Session = Depends(get_db)):
+    return _serve_sidecar(session_id, db, "stitched_watermarked.jpg", "image/jpeg")
+
+
+@app.post(f"{settings.api_prefix}/sessions/{{session_id}}/verify-watermark", response_model=VerifyResponse)
+async def verify_watermark(session_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """Trace a (possibly leaked / modified) image back to its watermark + detect tampering."""
+    import json as _json
+
+    import cv2
+    import numpy as np
+
+    from .services.watermark import hamming_distance, perceptual_hash, verify_payload
+
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    raw = np.frombuffer(await file.read(), np.uint8)
+    bgr = cv2.imdecode(raw, cv2.IMREAD_COLOR)
+    if bgr is None:
+        raise HTTPException(status_code=400, detail="Could not decode the uploaded image")
+
+    rights_path = output_dir(session_id) / "rights.json"
+    registry = []
+    if rights_path.exists():
+        try:
+            registry = _json.loads(rights_path.read_text(encoding="utf-8"))
+        except Exception:
+            registry = []
+
+    best = {"match_fraction": 0.0, "recipient": None, "payload": None, "phash": None}
+    for rec in registry:
+        res = verify_payload(bgr, rec["payload"])
+        if res["match_fraction"] > best["match_fraction"]:
+            best = {"match_fraction": res["match_fraction"], "recipient": rec.get("recipient"),
+                    "payload": rec.get("payload"), "phash": rec.get("phash")}
+
+    found = best["match_fraction"] >= 0.85
+    phash_dist = hamming_distance(best["phash"], perceptual_hash(bgr)) if best["phash"] else 64
+    # Watermark present but perceptual hash diverged => the content was modified.
+    tampered = bool(found and phash_dist > 8)
+    return VerifyResponse(
+        watermark_found=found, recipient=best["recipient"] if found else None,
+        payload=best["payload"] if found else None, match_fraction=round(best["match_fraction"], 4),
+        tampered=tampered, phash_distance=phash_dist,
+    )
 
 
 @app.post(f"{settings.api_prefix}/sessions/{{session_id}}/images")

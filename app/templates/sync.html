@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hyper Gigapixel Agent · Compare</title>
+  <link rel="stylesheet" href="/static/theme.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/openseadragon/5.0.1/openseadragon.min.js"></script>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    .bar { position: fixed; top: 0; left: 0; right: 0; z-index: 5; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+      padding: 10px 14px; border-bottom: 1px solid var(--color-border);
+      background: color-mix(in srgb, var(--color-surface) 92%, transparent); backdrop-filter: blur(8px); }
+    .bar input { width: auto; min-height: 0; padding: 6px 9px; font-size: .82rem; }
+    .bar button, .bar a { width: auto; min-height: 0; padding: 7px 12px; font-size: .82rem; border-radius: var(--radius-md);
+      border: 1px solid var(--accent); background: var(--accent); color: var(--color-on-primary); font-weight: 600; cursor: pointer; text-decoration: none; }
+    .stage { position: fixed; top: 54px; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: 1fr 1fr; }
+    .pane { position: relative; min-width: 0; border-right: 1px solid var(--color-border); }
+    .osd { position: absolute; inset: 0; background: var(--viewer-bg); }
+    .tag { position: absolute; top: 10px; left: 10px; z-index: 3; padding: 3px 11px; border-radius: 999px; font-family: var(--font-mono);
+      font-size: .74rem; background: rgba(0,0,0,.45); color: #fff; }
+    .spacer { flex: 1; }
+    label { margin: 0; font-size: .8rem; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <span class="hga-brand"><svg class="hga-logo" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:26px;height:26px">
+      <rect x="3" y="3" width="18" height="18" rx="4.5" stroke="currentColor" stroke-width="1.4"/>
+      <path d="M12 5.2v3.1M12 15.7v3.1M5.2 12h3.1M15.7 12h3.1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      <circle cx="12" cy="12" r="3.1" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="12" r="0.95" fill="currentColor"/>
+    </svg> <span class="hga-sub">Compare</span></span>
+    <label>A <input id="ida" value="{{ a }}" placeholder="session id A"></label>
+    <label>B <input id="idb" value="{{ b }}" placeholder="session id B"></label>
+    <button id="loadBtn">Load</button>
+    <label><input type="checkbox" id="syncChk" checked> Sync pan/zoom</label>
+    <div class="spacer"></div>
+    <span id="status" style="color:var(--muted);font-family:var(--font-mono);font-size:.8rem"></span>
+  </div>
+  <div class="stage">
+    <div class="pane"><span class="tag" id="tagA">A</span><div id="osdA" class="osd"></div></div>
+    <div class="pane"><span class="tag" id="tagB">B</span><div id="osdB" class="osd"></div></div>
+  </div>
+
+  <script>
+    let vA = null, vB = null, syncing = false;
+    const statusEl = document.getElementById("status");
+    const syncChk = document.getElementById("syncChk");
+
+    async function dziFor(id) {
+      const res = await fetch(`/api/sessions/${id}/dzi`);
+      if (!res.ok) throw new Error("no DZI for " + id);
+      const xml = new DOMParser().parseFromString(await res.text(), "text/xml");
+      const img = xml.getElementsByTagName("Image")[0];
+      const size = xml.getElementsByTagName("Size")[0];
+      return {
+        Image: {
+          xmlns: "http://schemas.microsoft.com/deepzoom/2008",
+          Url: `/api/sessions/${id}/tiles/`,
+          Format: img.getAttribute("Format"), Overlap: img.getAttribute("Overlap"),
+          TileSize: img.getAttribute("TileSize"),
+          Size: { Width: size.getAttribute("Width"), Height: size.getAttribute("Height") },
+        },
+      };
+    }
+
+    function makeViewer(el, tileSource) {
+      return OpenSeadragon({ element: el, prefixUrl: "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/5.0.1/images/",
+        tileSources: tileSource, showNavigationControl: false, animationTime: 0.4 });
+    }
+
+    function link(src, dst) {
+      src.addHandler("viewport-change", () => {
+        if (!syncChk.checked || syncing || !dst) return;
+        syncing = true;
+        dst.viewport.zoomTo(src.viewport.getZoom(), null, true);
+        dst.viewport.panTo(src.viewport.getCenter(), true);
+        syncing = false;
+      });
+    }
+
+    async function load() {
+      const a = document.getElementById("ida").value.trim();
+      const b = document.getElementById("idb").value.trim();
+      if (!a || !b) { statusEl.textContent = "Enter two session ids."; return; }
+      statusEl.textContent = "Loading…";
+      try {
+        if (vA) vA.destroy(); if (vB) vB.destroy();
+        const [ta, tb] = await Promise.all([dziFor(a), dziFor(b)]);
+        vA = makeViewer(document.getElementById("osdA"), ta);
+        vB = makeViewer(document.getElementById("osdB"), tb);
+        document.getElementById("tagA").textContent = "A · " + a.slice(0, 8);
+        document.getElementById("tagB").textContent = "B · " + b.slice(0, 8);
+        vA.addHandler("open", () => { link(vA, vB); link(vB, vA); });
+        statusEl.textContent = "Drag either side — views stay in sync.";
+        history.replaceState(null, "", `/sync?a=${a}&b=${b}`);
+      } catch (e) { statusEl.textContent = "Could not load (both sessions must be ready)."; }
+    }
+    document.getElementById("loadBtn").addEventListener("click", load);
+    if (document.getElementById("ida").value && document.getElementById("idb").value) load();
+  </script>
+</body>
+</html>

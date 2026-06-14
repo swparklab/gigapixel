@@ -25,6 +25,10 @@ kornia-rs>=0.1.1
 # pyvips>=2.2.2
 # Optional (automatic EXIF-based lens distortion correction):
 # lensfunpy>=1.14.0
+# Optional (AES-256-GCM encrypted archival packaging):
+# cryptography>=42.0.0
+# Optional (textured GLB mesh export for image-to-3D):
+# trimesh>=4.0.0
 # Optional (LaMa deep inpainting for repairing large/structured holes;
 # classical inpainting is used automatically when this is absent):
 # simple-lama-inpainting>=0.1.2

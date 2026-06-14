@@ -25,6 +25,7 @@ class Session(Base):
     tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # comma-separated auto-tags
     metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # Dublin Core descriptive metadata
     pixels_per_mm: Mapped[float | None] = mapped_column(Float, nullable=True)  # dimensional calibration
+    pid: Mapped[str | None] = mapped_column(String(80), nullable=True)  # persistent identifier (ARK)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True),

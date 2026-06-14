@@ -23,6 +23,8 @@ This project is designed for digital heritage acquisition and restoration workfl
 - Interactive local upscaling: pick a factor on the finished mosaic and run a high-quality upscale (ComfyUI Flux / diffusers SD-x4 / Real-ESRGAN / Lanczos).
 - Versatile image-to-3D: turn the mosaic into 3D Gaussian Splatting (`.ply`/`.splat`), a textured relief mesh (`.obj`/`.glb`), or depth/normal maps, explorable in-browser with a real Gaussian-splat renderer and a mesh viewer (optional TRELLIS / Hunyuan3D backends).
 - Curator/scholar workbench: descriptive (Dublin Core) metadata, on-image measurement in mm (scale calibration), region annotations with tags exported as IIIF AnnotationPages, citable IIIF region deep-links, a printable condition report, a raking-light (RTI-style) relief viewer, a sessions dashboard, and BagIt archival export.
+- Rights protection & authentication (KOCCA pillar): an invisible DCT watermark embedding a per-recipient identifier, perceptual-hash tamper detection / leak tracing, AES-256-GCM encrypted packaging, ARK persistent identifiers, and LIDO / Dublin Core XML export.
+- Material reproduction: roughness and gloss/specular maps from surface relief, and a synchronized side-by-side comparison viewer (original vs result, or two states).
 - Tiled multi-band blending that preserves multi-band quality at gigapixel scale instead of degrading to feather compositing.
 - Automatic output quality control (interior-hole, coverage, sharpness, seam, registration, and learned no-reference quality checks) with an `ok`/`warn`/`broken` verdict and a `quality_report.json` sidecar.
 - Automatic repair of enclosed holes via inpainting (optional LaMa deep backend, classical fallback).
@@ -406,6 +408,38 @@ Verification: **56 tests pass**, including the condition report, a valid BagIt
 package, and metadata/scale/region-annotation APIs
 ([`tests/test_curator.py`](tests/test_curator.py)).
 
+## Update Notes — Rights Protection, Authentication & Material
+
+Implements the KOCCA project's copyright-protection pillar (위·변조 방지, 고속
+암·복호화, 단계별 권한, 사용자별 고유 식별자 삽입) and texture/comparison needs.
+
+1. **Invisible watermark + tamper authentication**
+   ([`watermark.py`](app/services/watermark.py)). A blind DCT-QIM watermark
+   redundantly embeds a per-recipient identifier into the luminance channel
+   (≈47 dB PSNR — imperceptible) and survives JPEG recompression; `POST
+   .../watermark` issues a traceable copy and `POST .../verify-watermark` (upload
+   an image) traces it back to the **recipient** and flags **tampering** via a
+   perceptual hash. The "사용자별 고유 식별자 부여 및 삽입" + "위·변조 방지"
+   deliverables.
+2. **Encrypted packaging** ([`archive.py`](app/services/archive.py)).
+   `GET .../archive?encrypt=true&passphrase=…` returns an **AES-256-GCM**
+   (PBKDF2-derived key) encrypted BagIt — the "고속 암·복호화 / 단계별 활용 권한"
+   path (needs the optional `cryptography` package).
+3. **Persistent identifiers + standards XML** — every session gets a stable
+   **ARK** PID (`GET .../pid`); descriptive metadata exports as **LIDO 1.0** or
+   **OAI Dublin Core** (`GET .../metadata.xml?format=lido|dc`) for repository
+   interoperability.
+4. **Material reproduction** — `representation=material` on `/to3d` emits
+   **roughness** and **gloss/specular** maps from surface relief (the
+   "고유 질감 모사·광택" axis).
+5. **Synchronized comparison viewer** (`/sync?a=…&b=…`) — two OpenSeadragon
+   panes with linked pan/zoom for **원형 대비 비교 분석** (original vs result, or
+   two conservation states).
+
+Verification: **61 tests pass**, including watermark embed/extract through JPEG,
+perceptual-hash tamper detection, AES encrypt/decrypt round-trip, material maps,
+and PID + LIDO/DC XML APIs ([`tests/test_rights.py`](tests/test_rights.py)).
+
 ## Project Status
 
 This repository is an active research and engineering prototype.
@@ -606,7 +640,12 @@ The agent emits structured JSON logs. Example:
 | IIIF annotations | `GET /api/sessions/{session_id}/iiif/annotations` |
 | Condition report | `/report/{session_id}` |
 | Raking-light viewer | `/relief/{session_id}` |
-| BagIt archive | `GET /api/sessions/{session_id}/archive` |
+| BagIt archive | `GET /api/sessions/{session_id}/archive?encrypt=&passphrase=` |
+| Watermark / authenticate | `POST /api/sessions/{session_id}/watermark` · `/verify-watermark` · `/download/watermarked` |
+| Persistent ID | `GET /api/sessions/{session_id}/pid` |
+| LIDO / DC XML | `GET /api/sessions/{session_id}/metadata.xml?format=lido\|dc` |
+| Material maps | `POST /api/sessions/{session_id}/to3d` (`representation=material`) |
+| Synchronized compare | `/sync?a={id}&b={id}` |
 
 ## Typical Workflow
 

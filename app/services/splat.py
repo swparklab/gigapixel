@@ -302,14 +302,28 @@ def _deep_image_to_3d(bgr: np.ndarray, output_base: Path, log: LogFn) -> dict | 
         return None
 
 
+def material_maps(bgr: np.ndarray, depth: np.ndarray, strength: float):
+    """Estimate surface material proxies — roughness and gloss/specular —
+    from local relief and highlight statistics (texture/gloss reproduction)."""
+    normals = normal_map_from_depth(depth, strength).astype(np.float32) / 255.0 * 2.0 - 1.0
+    # Roughness ~ local variance of surface normals (rough = noisy normals).
+    nvar = cv2.GaussianBlur((normals[..., 0] ** 2 + normals[..., 1] ** 2), (0, 0), 3.0)
+    roughness = cv2.normalize(nvar, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+    # Gloss/specular ~ bright, low-saturation highlights on the surface.
+    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV).astype(np.float32)
+    spec = np.clip((hsv[..., 2] / 255.0 - 0.6) / 0.4, 0, 1) * (1.0 - hsv[..., 1] / 255.0)
+    gloss = (cv2.GaussianBlur(spec, (0, 0), 1.5) * 255.0).astype(np.uint8)
+    return roughness, gloss
+
+
 def build_3d(bgr: np.ndarray, representation: str, output_base: Path, log: LogFn = _noop) -> dict:
     """Produce the requested 3D representation(s) from a single image.
 
-    representation: splat | pointcloud | gaussian | mesh | depth | normals | all
+    representation: splat | pointcloud | gaussian | mesh | depth | normals | material | all
     Returns {"representation", "depth_backend", "artifacts": {name: Path}, ...}.
     """
     representation = (representation or settings.to3d_default_representation).lower()
-    wants = {"splat", "pointcloud", "gaussian", "mesh", "depth", "normals"}
+    wants = {"splat", "pointcloud", "gaussian", "mesh", "depth", "normals", "material"}
     selected = wants if representation == "all" else {representation}
     artifacts: dict[str, Path] = {}
 
@@ -347,6 +361,14 @@ def build_3d(bgr: np.ndarray, representation: str, output_base: Path, log: LogFn
         p = output_base / "normal_map.png"
         cv2.imencode(".png", normal_map_from_depth(depth, float(settings.splat_depth_strength)))[1].tofile(str(p))
         artifacts["normals"] = p
+    if "material" in selected:
+        rough, gloss = material_maps(bgr, depth, float(settings.splat_depth_strength))
+        rp = output_base / "roughness_map.png"
+        gp = output_base / "gloss_map.png"
+        cv2.imencode(".png", rough)[1].tofile(str(rp))
+        cv2.imencode(".png", gloss)[1].tofile(str(gp))
+        artifacts["roughness"] = rp
+        artifacts["gloss"] = gp
 
     if deep:
         for key in ("gaussian", "mesh_glb"):

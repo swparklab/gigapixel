@@ -25,6 +25,7 @@ _ADDITIVE_COLUMNS = {
         "tags": "TEXT",
         "metadata_json": "TEXT",
         "pixels_per_mm": "FLOAT",
+        "pid": "VARCHAR(80)",
     },
     "annotations": {
         "shape": "VARCHAR(16) DEFAULT 'point'",

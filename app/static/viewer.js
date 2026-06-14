@@ -601,11 +601,27 @@ function injectSmartControls() {
     setMeta(measureMode ? (ko0 ? "두 점을 클릭해 거리를 측정" : "Click two points to measure") : "");
   });
   const citeBtn = mkBtn(ko0 ? "🔗 영역 인용" : "🔗 Cite region", async () => copyRegionLink());
+  const wmBtn = mkBtn(ko0 ? "🔏 워터마크" : "🔏 Watermark", async () => {
+    const recipient = prompt(ko0 ? "수령자/라이선스 식별자(워터마크에 삽입):" : "Recipient / licence (embedded in the watermark):");
+    if (!recipient) return;
+    wmBtn.textContent = ko0 ? "삽입 중…" : "Embedding…";
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/watermark`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ recipient }),
+      });
+      const d = await res.json();
+      wmBtn.textContent = ko0 ? `🔏 토큰 ${d.token}` : `🔏 token ${d.token}`;
+      window.open(d.download_url, "_blank");
+    } catch (e) { wmBtn.textContent = ko0 ? "🔏 워터마크" : "🔏 Watermark"; }
+  });
   tools.appendChild(measureBtn);
   tools.appendChild(citeBtn);
+  tools.appendChild(wmBtn);
   [
     [ko0 ? "📄 보고서" : "📄 Report", `/report/${sessionId}`],
     [ko0 ? "💡 레이킹광" : "💡 Raking", `/relief/${sessionId}`],
+    [ko0 ? "↔ 비교" : "↔ Compare", `/sync?a=${sessionId}`],
+    [ko0 ? "🆔 LIDO" : "🆔 LIDO", `/api/sessions/${sessionId}/metadata.xml?format=lido`],
     [ko0 ? "📦 아카이브(BagIt)" : "📦 Archive (BagIt)", `/api/sessions/${sessionId}/archive`],
   ].forEach(([label, href]) => {
     const a = document.createElement("a");

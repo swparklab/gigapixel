@@ -29,14 +29,61 @@ _PAYLOAD = [
     "processing_manifest.json",
     "dublin_core.json",
     "metadata.json",
+    "rights.json",
     "dzi/image.dzi",
     "iiif/info.json",
     "iiif/manifest.json",
 ]
 
 
+_ENC_MAGIC = b"HGAENC1\n"
+
+
 def _sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def encrypt_package(data: bytes, passphrase: str) -> bytes:
+    """AES-256-GCM encrypt a package with a PBKDF2-derived key (rights/access).
+
+    Layout: magic | salt(16) | nonce(12) | ciphertext+tag. Requires the optional
+    ``cryptography`` package; raises RuntimeError otherwise.
+    """
+    try:
+        import os
+
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+        from cryptography.hazmat.primitives import hashes
+    except Exception:
+        raise RuntimeError("Encrypted packaging needs the 'cryptography' package (pip install cryptography).")
+
+    from ..config import settings
+
+    salt = os.urandom(16)
+    nonce = os.urandom(12)
+    kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt,
+                     iterations=int(settings.archive_encrypt_iterations))
+    key = kdf.derive(passphrase.encode("utf-8"))
+    ct = AESGCM(key).encrypt(nonce, data, None)
+    return _ENC_MAGIC + salt + nonce + ct
+
+
+def decrypt_package(blob: bytes, passphrase: str) -> bytes:
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    from cryptography.hazmat.primitives import hashes
+
+    from ..config import settings
+
+    if not blob.startswith(_ENC_MAGIC):
+        raise ValueError("Not an HGA encrypted package")
+    body = blob[len(_ENC_MAGIC):]
+    salt, nonce, ct = body[:16], body[16:28], body[28:]
+    kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt,
+                     iterations=int(settings.archive_encrypt_iterations))
+    key = kdf.derive(passphrase.encode("utf-8"))
+    return AESGCM(key).decrypt(nonce, ct, None)
 
 
 def build_bagit(session_id: str, session_name: str, output_base: Path) -> bytes:
