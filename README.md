@@ -36,6 +36,7 @@ This project is designed for digital heritage acquisition and restoration workfl
 - **Corpus semantic search + auto-tagging** (CLIP / classical) across sessions.
 - **Acquisition coverage QA** — overlap-graph connectivity check with recommendations before stitching.
 - **Streaming gigapixel compositor** (disk-backed canvas) and **optional API-key authentication**.
+- **Generative outpainting** to fill a rotated mosaic's empty borders or extend the field of view (ComfyUI Flux Fill / diffusers / classical), emitted as a non-archival variant with the generated pixels flagged.
 - Raw high-resolution output as BigTIFF.
 - Optimized JPEG output for smaller distribution workflows.
 - Deep Zoom Image generation for web-scale viewing.
@@ -300,6 +301,26 @@ Verification: test suite **47 passed**, including
 fail, coverage connectivity, multi-view fusion PLY, semantic tagging + keyword
 search, streaming-vs-in-memory equivalence, API-key enforcement).
 
+## Update Notes — Generative Outpainting
+
+A stitched mosaic is rarely a clean rectangle: rotation/shear leaves empty
+corners in its bounding box. [`outpaint.py`](app/services/outpaint.py) fills
+those (`fill_borders`) or extends the field of view (`extend`) generatively,
+via `POST /api/sessions/{id}/outpaint` and an **Outpaint** button in the viewer.
+
+Because the new pixels are *invented*, the output is a clearly non-archival
+variant (`stitched_outpainted.jpg`) and the synthesised region is recorded in an
+`outpaint_mask` so it is never confused with measured data. Off by default;
+`STITCH_OUTPAINT_FILL=true` also runs border-fill at the end of the pipeline.
+
+Backends (`OUTPAINT_BACKEND`): **comfyui** submits a ComfyUI workflow (e.g. the
+Flux Fill outpaint graph) to a configured server — set `COMFYUI_URL` and export
+your workflow to `COMFYUI_WORKFLOW_PATH` (API format); **diffusers** runs a local
+SD/Flux inpaint pipeline filling the exact mask; **classical** (always available)
+uses mirror-extension for `extend` and Navier-Stokes inpainting for borders.
+Two tests in [`tests/test_agent_platform.py`](tests/test_agent_platform.py) cover
+the classical paths (49 passed).
+
 ## Project Status
 
 This repository is an active research and engineering prototype.
@@ -491,6 +512,7 @@ The agent emits structured JSON logs. Example:
 | Semantic search | `GET /api/search?q=…` |
 | Coverage QA | `POST /api/sessions/{session_id}/coverage-check` |
 | Queue status | `GET /api/sessions/{session_id}/queue` |
+| Outpaint | `POST /api/sessions/{session_id}/outpaint` · `/download/outpainted` · `/outpaint-mask` |
 
 ## Typical Workflow
 

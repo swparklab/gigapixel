@@ -87,6 +87,32 @@ def test_depth_and_pointcloud_generation():
     assert len(points) <= 20000 and len(points) == len(colors)
 
 
+def test_outpaint_fill_borders_fills_empty_corners():
+    from app.services.outpaint import outpaint_image
+
+    img = _heritage(400, 600)
+    img[:90, :140] = 0   # empty exterior corner of a rotated mosaic
+    img[330:, 470:] = 0
+    result = outpaint_image(img, mode="fill_borders")
+    assert result.backend in ("classical", "diffusers", "comfyui")
+    # corner is no longer empty, and is flagged as generated
+    assert float(result.image[:90, :140].mean()) > 10.0
+    assert int(result.generated_mask[10, 10]) > 0
+    # an interior measured pixel stays untouched
+    assert int(result.generated_mask[200, 300]) == 0
+
+
+def test_outpaint_extend_grows_canvas_and_flags_ring():
+    from app.services.outpaint import outpaint_image
+
+    img = _heritage(300, 400)
+    result = outpaint_image(img, mode="extend", margin=60)
+    assert result.image.shape[0] == 300 + 120 and result.image.shape[1] == 400 + 120
+    assert int(result.generated_mask[5, 5]) == 255          # added ring is generated
+    assert int(result.generated_mask[180, 230]) == 0        # original interior preserved
+    assert float(result.image[5, 230].mean()) > 5.0         # mirror-filled margin, not black
+
+
 def test_gaussian_ply_is_standards_compliant():
     img = _heritage(120, 160)
     tmp = Path(tempfile.mkdtemp())

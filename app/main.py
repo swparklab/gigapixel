@@ -25,6 +25,8 @@ from .schemas import (
     CoverageResponse,
     DamageResponse,
     FocusStackResponse,
+    OutpaintRequest,
+    OutpaintResponse,
     ReconResponse,
     SearchResponse,
     TagsResponse,
@@ -637,6 +639,48 @@ def restore_endpoint(session_id: str, db: Session = Depends(get_db)):
 @app.get(f"{settings.api_prefix}/sessions/{{session_id}}/download/restored")
 def download_restored(session_id: str, db: Session = Depends(get_db)):
     return _serve_sidecar(session_id, db, "restored.jpg", "image/jpeg")
+
+
+@app.post(f"{settings.api_prefix}/sessions/{{session_id}}/outpaint", response_model=OutpaintResponse)
+def outpaint_endpoint(session_id: str, payload: OutpaintRequest, db: Session = Depends(get_db)):
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.status != "ready":
+        raise HTTPException(status_code=409, detail="Session is not ready yet")
+
+    import cv2
+
+    from .services.outpaint import outpaint_image
+
+    bgr = _read_raw_bgr(session, max_dim=max(2048, int(settings.outpaint_max_dim)))
+    result = outpaint_image(bgr, mode=payload.mode, margin=payload.margin)
+    base = output_dir(session_id)
+    cv2.imencode(".jpg", result.image, [cv2.IMWRITE_JPEG_QUALITY, 95])[1].tofile(str(base / "stitched_outpainted.jpg"))
+    cv2.imencode(".png", result.generated_mask)[1].tofile(str(base / "outpaint_mask.png"))
+    h, w = result.image.shape[:2]
+    generated = float(int((result.generated_mask > 0).sum())) / max(1, h * w)
+    api = settings.api_prefix
+    return OutpaintResponse(
+        ok=True,
+        backend=result.backend,
+        mode=result.mode,
+        width=w,
+        height=h,
+        generated_fraction=round(generated, 6),
+        image_url=f"{api}/sessions/{session_id}/download/outpainted",
+        mask_url=f"{api}/sessions/{session_id}/outpaint-mask",
+    )
+
+
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/download/outpainted")
+def download_outpainted(session_id: str, db: Session = Depends(get_db)):
+    return _serve_sidecar(session_id, db, "stitched_outpainted.jpg", "image/jpeg")
+
+
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/outpaint-mask")
+def get_outpaint_mask(session_id: str, db: Session = Depends(get_db)):
+    return _serve_sidecar(session_id, db, "outpaint_mask.png", "image/png")
 
 
 @app.post(f"{settings.api_prefix}/sessions/{{session_id}}/splat", response_model=SplatResponse)

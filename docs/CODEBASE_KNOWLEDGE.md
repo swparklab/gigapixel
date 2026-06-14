@@ -240,6 +240,7 @@ Important distinction: classic processing uses a queued polling agent. Node work
 | `GET` | `/api/search?q=` | Corpus semantic search |
 | `POST` | `/api/sessions/{session_id}/coverage-check` | Acquisition coverage QA |
 | `GET` | `/api/sessions/{session_id}/queue` | Queue position + job status |
+| `POST` | `/api/sessions/{session_id}/outpaint` | Generative border-fill / extend |
 | `GET` | `/api/sessions/{session_id}/tiles/{tile_path}` | Serve DZI tile |
 | `GET` | `/api/sessions/{session_id}/annotations` | List annotations |
 | `POST` | `/api/sessions/{session_id}/annotations` | Create annotation |

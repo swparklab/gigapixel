@@ -253,6 +253,21 @@ class Settings(BaseSettings):
     streaming_threshold_pixels: int = 800_000_000
     streaming_tile: int = 2048
 
+    # --- Generative outpainting (canvas extension / border fill) -------------
+    # Generative; produces a NON-archival variant with generated pixels flagged
+    # in an outpaint mask. auto: ComfyUI when configured -> diffusers -> classical.
+    outpaint_backend: str = "auto"        # auto | comfyui | diffusers | classical
+    outpaint_default_mode: str = "fill_borders"  # fill_borders | extend
+    outpaint_margin_px: int = 256         # margin per side for "extend" mode
+    outpaint_max_dim: int = 2048          # processing cap for the deep backends
+    # Optional auto border-fill at the end of the pipeline (OFF by default).
+    stitch_outpaint_fill: bool = False
+    # ComfyUI integration (e.g. the Flux Fill outpaint workflow). When both are
+    # set, the workflow JSON is submitted to the ComfyUI server with the mosaic
+    # injected into its LoadImage node.
+    comfyui_url: str = ""                 # e.g. http://127.0.0.1:8188
+    comfyui_workflow_path: str = ""       # path to the ComfyUI workflow .json
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

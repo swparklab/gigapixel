@@ -502,12 +502,29 @@ function injectSmartControls() {
   const splatBtn = mkBtn(ko0 ? "🧊 3D 탐색" : "🧊 3D Explore", async () => {
     window.open(`/viewer3d/${sessionId}`, "_blank");
   });
+  const outpaintBtn = mkBtn(ko0 ? "🖼️ 외곽 확장" : "🖼️ Outpaint", async () => {
+    const original = outpaintBtn.textContent;
+    outpaintBtn.textContent = ko0 ? "생성 중…" : "Generating…";
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/outpaint`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "fill_borders" }),
+      });
+      const d = await res.json();
+      outpaintBtn.textContent = ko0 ? `🖼️ 외곽 (${d.backend})` : `🖼️ Outpaint (${d.backend})`;
+      window.open(d.image_url, "_blank");
+    } catch (e) {
+      outpaintBtn.textContent = original;
+    }
+  });
 
   panel.appendChild(segBtn);
   panel.appendChild(dmgBtn);
   panel.appendChild(condBtn);
   panel.appendChild(restoreBtn);
   panel.appendChild(splatBtn);
+  panel.appendChild(outpaintBtn);
   const host = document.getElementById("openseadragon") || document.body;
   if (getComputedStyle(host).position === "static") host.style.position = "relative";
   host.appendChild(panel);

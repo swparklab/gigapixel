@@ -119,6 +119,25 @@ def _maybe_enhance(stitched, output_base: Path) -> None:
         logger.warning("enhancement skipped", extra={"error": str(exc)})
 
 
+def _maybe_outpaint(stitched, output_base: Path) -> None:
+    """Optionally fill the mosaic's empty (rotated) borders. Generative; OFF by default."""
+    if not bool(settings.stitch_outpaint_fill):
+        return
+    try:
+        import cv2
+
+        from .outpaint import outpaint_image
+
+        result = outpaint_image(stitched, mode="fill_borders")
+        cv2.imencode(".jpg", result.image, [cv2.IMWRITE_JPEG_QUALITY, 95])[1].tofile(
+            str(output_base / "stitched_outpainted.jpg")
+        )
+        cv2.imencode(".png", result.generated_mask)[1].tofile(str(output_base / "outpaint_mask.png"))
+        logger.info("outpaint border-fill written", extra={"backend": result.backend})
+    except Exception as exc:  # pragma: no cover - optional/best-effort
+        logger.warning("outpaint skipped", extra={"error": str(exc)})
+
+
 def _write_iiif(session_id: str, width: int, height: int, output_base: Path) -> None:
     if not bool(settings.iiif_enabled):
         return
@@ -180,6 +199,7 @@ def run_pipeline(db: Session, session: SessionModel, mode: str = "scans") -> Ses
         )
 
         _maybe_enhance(stitched, output_base)
+        _maybe_outpaint(stitched, output_base)
 
         descriptor_path, dzi_width, dzi_height = generate_dzi(
             raw_stitched_path,

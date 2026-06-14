@@ -183,6 +183,22 @@ class CoverageResponse(BaseModel):
     recommendations: list[str]
 
 
+class OutpaintRequest(BaseModel):
+    mode: str = Field(default="fill_borders", pattern="^(fill_borders|extend)$")
+    margin: int = Field(default=256, ge=8, le=4096)
+
+
+class OutpaintResponse(BaseModel):
+    ok: bool
+    backend: str
+    mode: str
+    width: int
+    height: int
+    generated_fraction: float
+    image_url: str
+    mask_url: str
+
+
 class ProcessRequest(BaseModel):
     mode: str = Field(default="scans", pattern="^(scans|panorama)$")
 
