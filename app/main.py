@@ -42,6 +42,8 @@ from .schemas import (
     SessionCreate,
     SessionRead,
     SplatResponse,
+    UpscaleRequest,
+    UpscaleResponse,
 )
 from .services.exporter import (
     build_download_filename,
@@ -681,6 +683,53 @@ def download_outpainted(session_id: str, db: Session = Depends(get_db)):
 @app.get(f"{settings.api_prefix}/sessions/{{session_id}}/outpaint-mask")
 def get_outpaint_mask(session_id: str, db: Session = Depends(get_db)):
     return _serve_sidecar(session_id, db, "outpaint_mask.png", "image/png")
+
+
+@app.post(f"{settings.api_prefix}/sessions/{{session_id}}/upscale", response_model=UpscaleResponse)
+def upscale_endpoint(session_id: str, payload: UpscaleRequest, db: Session = Depends(get_db)):
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.status != "ready":
+        raise HTTPException(status_code=409, detail="Session is not ready yet")
+
+    import cv2
+
+    from .services.upscale import upscale_image
+
+    factor = float(payload.factor)
+    # Cap the input so the upscaled output stays within the configured pixel budget.
+    import math
+
+    max_out = int(settings.upscale_max_output_pixels)
+    input_cap = max(512, int(math.sqrt(max_out) / max(1.0, factor)))
+    bgr = _read_raw_bgr(session, max_dim=input_cap)
+
+    if payload.backend:
+        original_backend = settings.upscale_backend
+        settings.upscale_backend = payload.backend
+    try:
+        result = upscale_image(bgr, factor)
+    finally:
+        if payload.backend:
+            settings.upscale_backend = original_backend
+
+    out_path = output_dir(session_id) / "stitched_upscaled.jpg"
+    cv2.imencode(".jpg", result.image, [cv2.IMWRITE_JPEG_QUALITY, 95])[1].tofile(str(out_path))
+    h, w = result.image.shape[:2]
+    return UpscaleResponse(
+        ok=True,
+        backend=result.backend,
+        factor=result.factor,
+        width=w,
+        height=h,
+        image_url=f"{settings.api_prefix}/sessions/{session_id}/download/upscaled",
+    )
+
+
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/download/upscaled")
+def download_upscaled(session_id: str, db: Session = Depends(get_db)):
+    return _serve_sidecar(session_id, db, "stitched_upscaled.jpg", "image/jpeg")
 
 
 @app.post(f"{settings.api_prefix}/sessions/{{session_id}}/splat", response_model=SplatResponse)

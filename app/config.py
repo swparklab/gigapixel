@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     stitch_planar_neighbor_window: int = 12
     stitch_planar_transform_model: str = "affine"
     stitch_planar_global_optimize: bool = True
+    # Equalise per-image sharpness before feature detection so keypoints are
+    # consistent across captures with slightly different focus.
+    stitch_focus_normalize: bool = True
+    # Optical-flow elastic alignment of overlaps before blending. Removes the
+    # residual ghosting/"breaking" that rigid global alignment cannot fix when
+    # focus or detected points differ slightly between images.
+    stitch_planar_local_align: bool = True
+    stitch_local_align_max_disp: int = 24       # px clamp on local correction
+    stitch_local_align_backend: str = "auto"    # auto | raft | classical
     stitch_planar_exposure_compensation: bool = True
     stitch_planar_seam_finding: bool = True
     stitch_planar_multiband_bands: int = 5
@@ -267,6 +276,17 @@ class Settings(BaseSettings):
     # injected into its LoadImage node.
     comfyui_url: str = ""                 # e.g. http://127.0.0.1:8188
     comfyui_workflow_path: str = ""       # path to the ComfyUI workflow .json
+
+    # --- Interactive final-result upscaling ----------------------------------
+    # Pick a factor on the finished mosaic and run a high-quality upscale locally.
+    # auto: ComfyUI (Flux) -> diffusers (SD/Flux img2img) -> Real-ESRGAN -> Lanczos.
+    upscale_backend: str = "auto"
+    upscale_tile: int = 1024              # tile size for tiled diffusion upscaling
+    upscale_tile_overlap: int = 96
+    upscale_max_factor: int = 8
+    upscale_max_output_pixels: int = 2_000_000_000
+    # Optional dedicated ComfyUI upscale workflow (else the outpaint workflow path).
+    comfyui_upscale_workflow_path: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

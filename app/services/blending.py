@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 
 from ..config import settings
+from . import local_align
 from .feature_matching import read_image_bgr, read_image_info
 from .warping import CanvasPlan, WarpedImage, project_corners, warp_image_to_roi
 
@@ -55,6 +56,31 @@ def apply_graphcut_seams(warped_images: list[WarpedImage], log: LogFn = _noop) -
         log("[blend] graph-cut seam finding applied")
     except Exception as exc:
         log(f"[blend] graph-cut seam finding skipped: {exc}")
+
+
+def apply_local_alignment(warped_images: list[WarpedImage], width: int, height: int, log: LogFn = _noop) -> None:
+    """Elastically align each warped image to the union of the already-placed
+    images in their overlap, removing residual ghosting before blending."""
+    if not local_align.is_enabled() or len(warped_images) < 2:
+        return
+    reference = np.zeros((height, width, 3), dtype=np.uint8)
+    coverage = np.zeros((height, width), dtype=np.uint8)
+    refined = 0
+    for item in warped_images:
+        x0, y0 = item.corner
+        y1, x1 = y0 + item.image.shape[0], x0 + item.image.shape[1]
+        ref_roi = reference[y0:y1, x0:x1]
+        cov_roi = coverage[y0:y1, x0:x1]
+        member = item.mask > 0
+        overlap = (member & (cov_roi > 0)).astype(np.uint8) * 255
+        if int(np.count_nonzero(overlap)) >= 2000:
+            item.image = local_align.refine(item.image, ref_roi, overlap, log)
+            refined += 1
+            member = item.mask > 0
+        ref_roi[member] = item.image[member]
+        cov_roi[member] = 255
+    if refined:
+        log(f"[align] local elastic alignment applied to {refined} image(s)")
 
 
 def multiband_blend(warped_images: list[WarpedImage], width: int, height: int, log: LogFn = _noop) -> np.ndarray:
@@ -109,6 +135,9 @@ def _feed_feather(canvas, weights, warped, mask, corner):
     x1 = x0 + warped.shape[1]
     canvas_roi = canvas[y0:y1, x0:x1]
     weight_roi = weights[y0:y1, x0:x1]
+    overlap = ((alpha > 0.05) & (weight_roi > 0.2)).astype(np.uint8) * 255
+    if int(np.count_nonzero(overlap)) >= 2000:
+        warped = local_align.refine(warped, canvas_roi, overlap)
     warped = _match_overlap_exposure(warped, canvas_roi, weight_roi, alpha)
     active = alpha > 0.0
     previous_weight = weight_roi[active].reshape(-1, 1)
@@ -372,6 +401,7 @@ def blend_full_resolution(
             from .warping import prepare_warped_images
 
             warped_images = prepare_warped_images(image_paths, canvas_plan, log)
+            apply_local_alignment(warped_images, canvas_plan.width, canvas_plan.height, log)
             apply_exposure_compensation(warped_images, log)
             apply_graphcut_seams(warped_images, log)
             return multiband_blend(warped_images, canvas_plan.width, canvas_plan.height, log)

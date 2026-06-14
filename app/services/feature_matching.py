@@ -155,10 +155,28 @@ def _create_detector() -> tuple[object, str]:
     )
 
 
+def _normalize_focus(gray: np.ndarray) -> np.ndarray:
+    """Lift a soft (out-of-focus) image toward a reference sharpness so that the
+    same edges are detected across captures with slightly different focus."""
+    if not bool(getattr(settings, "stitch_focus_normalize", True)):
+        return gray
+    sharpness = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+    reference = 700.0
+    if sharpness >= reference or sharpness < 1.0:
+        return gray
+    amount = float(np.clip((reference / sharpness) - 1.0, 0.0, 1.4))
+    if amount < 0.05:
+        return gray
+    blurred = cv2.GaussianBlur(gray, (0, 0), 1.2)
+    sharp = cv2.addWeighted(gray, 1.0 + amount, blurred, -amount, 0)
+    return sharp
+
+
 def detect_features(preview: np.ndarray) -> tuple[list, np.ndarray | None, str]:
     gray = cv2.cvtColor(preview, cv2.COLOR_BGR2GRAY)
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     gray = clahe.apply(gray)
+    gray = _normalize_focus(gray)
     detector, detector_name = _create_detector()
     keypoints, descriptors = detector.detectAndCompute(gray, None)
     if descriptors is None or len(keypoints) < 8:

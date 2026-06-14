@@ -199,6 +199,20 @@ class OutpaintResponse(BaseModel):
     mask_url: str
 
 
+class UpscaleRequest(BaseModel):
+    factor: float = Field(default=2.0, ge=1.1, le=8.0)
+    backend: str | None = Field(default=None, pattern="^(auto|comfyui|diffusers|realesrgan|classical)$")
+
+
+class UpscaleResponse(BaseModel):
+    ok: bool
+    backend: str
+    factor: float
+    width: int
+    height: int
+    image_url: str
+
+
 class ProcessRequest(BaseModel):
     mode: str = Field(default="scans", pattern="^(scans|panorama)$")
 

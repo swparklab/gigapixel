@@ -113,6 +113,34 @@ def test_outpaint_extend_grows_canvas_and_flags_ring():
     assert float(result.image[5, 230].mean()) > 5.0         # mirror-filled margin, not black
 
 
+def test_interactive_upscale_scales_by_factor():
+    from app.config import settings
+    from app.services.upscale import upscale_image
+
+    img = _heritage(200, 300)
+    original = settings.upscale_backend
+    settings.upscale_backend = "classical"
+    try:
+        result = upscale_image(img, 3.0)
+        assert result.backend == "classical"
+        assert result.factor == 3.0
+        assert result.image.shape[0] == 600 and result.image.shape[1] == 900
+    finally:
+        settings.upscale_backend = original
+
+
+def test_local_align_reduces_overlap_misalignment():
+    from app.services.local_align import refine
+
+    ref = _heritage(280, 280)
+    moved = cv2.warpAffine(ref, np.float32([[1, 0, 3.0], [0, 1, -2.0]]), (280, 280), borderMode=cv2.BORDER_REFLECT)
+    overlap = np.full((280, 280), 255, np.uint8)
+    before = float(np.abs(ref.astype(int) - moved.astype(int)).mean())
+    aligned = refine(moved, ref, overlap)
+    after = float(np.abs(ref.astype(int) - aligned.astype(int)).mean())
+    assert after < before * 0.6  # elastic alignment markedly reduces the residual
+
+
 def test_gaussian_ply_is_standards_compliant():
     img = _heritage(120, 160)
     tmp = Path(tempfile.mkdtemp())

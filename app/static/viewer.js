@@ -519,12 +519,42 @@ function injectSmartControls() {
     }
   });
 
+  // Interactive upscale: pick a factor and run a local high-quality upscale.
+  const upWrap = document.createElement("span");
+  upWrap.style.cssText = "display:inline-flex;gap:4px;align-items:center";
+  const factorSel = document.createElement("select");
+  factorSel.className = "hga-tool-btn";
+  factorSel.style.cssText = "width:auto;min-height:0;padding:6px 8px";
+  [["2", "2×"], ["3", "3×"], ["4", "4×"], ["8", "8×"]].forEach(([v, t]) => {
+    const o = document.createElement("option");
+    o.value = v; o.textContent = t; factorSel.appendChild(o);
+  });
+  const upBtn = mkBtn(ko0 ? "⬆️ 업스케일" : "⬆️ Upscale", async () => {
+    const orig = upBtn.textContent;
+    upBtn.textContent = ko0 ? "업스케일 중…" : "Upscaling…";
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/upscale`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ factor: Number(factorSel.value) }),
+      });
+      const d = await res.json();
+      upBtn.textContent = ko0 ? `⬆️ ${d.width}×${d.height} (${d.backend})` : `⬆️ ${d.width}×${d.height} (${d.backend})`;
+      window.open(d.image_url, "_blank");
+    } catch (e) {
+      upBtn.textContent = orig;
+    }
+  });
+  upWrap.appendChild(factorSel);
+  upWrap.appendChild(upBtn);
+
   panel.appendChild(segBtn);
   panel.appendChild(dmgBtn);
   panel.appendChild(condBtn);
   panel.appendChild(restoreBtn);
   panel.appendChild(splatBtn);
   panel.appendChild(outpaintBtn);
+  panel.appendChild(upWrap);
   const host = document.getElementById("openseadragon") || document.body;
   if (getComputedStyle(host).position === "static") host.style.position = "relative";
   host.appendChild(panel);

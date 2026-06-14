@@ -19,6 +19,8 @@ This project is designed for digital heritage acquisition and restoration workfl
 - OpenCV-based feature detection, pair matching, global alignment, warping, seam handling, and blending.
 - Optional AI / learned feature matching (LoFTR, LightGlue) for high-accuracy registration on low-texture heritage surfaces, with automatic fallback to classical SIFT/ORB.
 - Robust global bundle adjustment (iteratively reweighted Huber least squares) for globally consistent alignment.
+- Focus-robust registration: per-image sharpness normalization for consistent keypoints, plus optical-flow elastic overlap alignment that removes the ghosting/"breaking" caused by focus or detected-point mismatch.
+- Interactive local upscaling: pick a factor on the finished mosaic and run a high-quality upscale (ComfyUI Flux / diffusers SD-x4 / Real-ESRGAN / Lanczos).
 - Tiled multi-band blending that preserves multi-band quality at gigapixel scale instead of degrading to feather compositing.
 - Automatic output quality control (interior-hole, coverage, sharpness, seam, registration, and learned no-reference quality checks) with an `ok`/`warn`/`broken` verdict and a `quality_report.json` sidecar.
 - Automatic repair of enclosed holes via inpainting (optional LaMa deep backend, classical fallback).
@@ -321,6 +323,30 @@ uses mirror-extension for `extend` and Navier-Stokes inpainting for borders.
 Two tests in [`tests/test_agent_platform.py`](tests/test_agent_platform.py) cover
 the classical paths (49 passed).
 
+## Update Notes — Focus-Robust Stitching & Interactive Upscaling
+
+Two improvements for messy real-world gigapixel sets.
+
+1. **Focus-robust registration.** Captures with slightly different focus produce
+   inconsistent keypoints, so rigid global alignment leaves residual
+   misalignment that "breaks"/ghosts after blending. Now:
+   * **Sharpness normalization** ([`feature_matching.py`](app/services/feature_matching.py))
+     lifts soft images toward a reference sharpness before detection, so the
+     same edges are found across the set (`STITCH_FOCUS_NORMALIZE`).
+   * **Optical-flow elastic alignment** ([`local_align.py`](app/services/local_align.py))
+     warps each image to its neighbours *inside the overlap* with a clamped,
+     overlap-feathered flow field before blending — removing the residual
+     ghosting rigid alignment cannot (`STITCH_PLANAR_LOCAL_ALIGN`). In a test a
+     ~4 px residual overlap error drops ~8x.
+2. **Interactive local upscaling** ([`upscale.py`](app/services/upscale.py),
+   `POST .../upscale`). Pick a factor (2×–8×) on the finished mosaic and run a
+   high-quality upscale **locally**: ComfyUI (Flux) → diffusers (tiled SD-x4) →
+   Real-ESRGAN → Lanczos+denoise+unsharp. A factor selector + **Upscale** button
+   sit in the viewer; the result is a `stitched_upscaled.jpg` variant.
+
+Verification: **51 tests pass**, including local-alignment residual reduction
+and classical upscale scaling.
+
 ## Project Status
 
 This repository is an active research and engineering prototype.
@@ -513,6 +539,7 @@ The agent emits structured JSON logs. Example:
 | Coverage QA | `POST /api/sessions/{session_id}/coverage-check` |
 | Queue status | `GET /api/sessions/{session_id}/queue` |
 | Outpaint | `POST /api/sessions/{session_id}/outpaint` · `/download/outpainted` · `/outpaint-mask` |
+| Upscale | `POST /api/sessions/{session_id}/upscale` · `/download/upscaled` |
 
 ## Typical Workflow
 
