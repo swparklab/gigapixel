@@ -6,20 +6,29 @@
   <title>Hyper Gigapixel Agent</title>
   <link rel="stylesheet" href="/static/styles.css" />
   <link rel="stylesheet" href="/static/theme.css" />
+  <link rel="stylesheet" href="/static/studio.css" />
 </head>
-<body>
-  <main class="container">
-    <section class="topbar">
-      <div class="hga-brand">
-        <svg class="hga-logo" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <rect x="3" y="3" width="18" height="18" rx="4.5" stroke="currentColor" stroke-width="1.4"/>
-          <path d="M12 5.2v3.1M12 15.7v3.1M5.2 12h3.1M15.7 12h3.1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-          <circle cx="12" cy="12" r="3.1" stroke="currentColor" stroke-width="1.4"/>
-          <circle cx="12" cy="12" r="0.95" fill="currentColor"/>
-        </svg>
-        <span class="hga-word">Hyper Gigapixel <b>Agent</b></span>
-        <span class="hga-sub">Heritage Imaging</span>
-      </div>
+<body class="studio">
+  <!-- ===== Top navigation =========================================== -->
+  <header class="studio-nav">
+    <a class="hga-brand" href="/">
+      <svg class="hga-logo" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <rect x="3" y="3" width="18" height="18" rx="4.5" stroke="currentColor" stroke-width="1.4"/>
+        <path d="M12 5.2v3.1M12 15.7v3.1M5.2 12h3.1M15.7 12h3.1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        <circle cx="12" cy="12" r="3.1" stroke="currentColor" stroke-width="1.4"/>
+        <circle cx="12" cy="12" r="0.95" fill="currentColor"/>
+      </svg>
+      <span class="hga-word">Hyper Gigapixel <b>Agent</b></span>
+    </a>
+
+    <nav class="studio-links">
+      <a id="openGalleryLink" href="/gallery">Gallery</a>
+      <a id="openWorkflowLink" href="/workflow">Expert Mode</a>
+      <a href="#planner" data-nav="planner">Planner</a>
+      <a href="#start" data-nav="start">Start</a>
+    </nav>
+
+    <div class="studio-nav-right">
       <section class="prefs-bar">
         <div class="prefs-group">
           <label id="langLabel" for="langSelect">Language</label>
@@ -36,32 +45,54 @@
           </select>
         </div>
       </section>
+      <a class="studio-cta" href="#start" data-cta>Start a project</a>
+    </div>
+  </header>
 
-      <a id="openWorkflowLink" class="mode-link" href="/workflow">Expert Mode</a>
-    </section>
+  <!-- ===== Cinematic 2-column hero ================================== -->
+  <section class="studio-hero">
+    <div class="hero-left">
+      <span class="hero-badge">KOCCA · RS-2024-00442410</span>
+      <h1 id="pageTitle">Hyper Gigapixel Agent</h1>
+      <p id="pageSubtitle">Upload multiple images and run stitching, DZI generation, and viewer sharing in one flow.</p>
 
-    <h1 id="pageTitle">Hyper Gigapixel Agent</h1>
-    <p id="pageSubtitle">Upload multiple images and run stitching, DZI generation, and viewer sharing in one flow.</p>
+      <div class="start-card" id="start">
+        <label id="sessionNameLabel" for="sessionName">Session Name</label>
+        <input id="sessionName" type="text" placeholder="e.g. Gyeongbokgung 1910 Scan" autocomplete="off" />
 
-    <section class="panel">
-      <label id="sessionNameLabel" for="sessionName">Session Name</label>
-      <input id="sessionName" type="text" placeholder="e.g. Gyeongbokgung 1910 Scan" autocomplete="off" />
+        <label id="filesLabel" for="files">Image Files (at least 2)</label>
+        <input id="files" type="file" multiple accept="image/*" />
 
-      <label id="filesLabel" for="files">Image Files (at least 2)</label>
-      <input id="files" type="file" multiple accept="image/*" />
+        <label id="stitchModeLabel" for="stitchMode">Stitch Mode</label>
+        <select id="stitchMode">
+          <option id="stitchModeScans" value="scans">scans (recommended for flat/document scans)</option>
+          <option id="stitchModePanorama" value="panorama">panorama (recommended for scene panoramas)</option>
+        </select>
 
-      <label id="stitchModeLabel" for="stitchMode">Stitch Mode</label>
-      <select id="stitchMode">
-        <option id="stitchModeScans" value="scans">scans (recommended for flat/document scans)</option>
-        <option id="stitchModePanorama" value="panorama">panorama (recommended for scene panoramas)</option>
-      </select>
+        <div class="start-actions">
+          <button id="startBtn" aria-describedby="status">Create Session and Start Processing</button>
+          <button id="nextBtn" type="button" class="secondary hidden">Prepare Next Output</button>
+        </div>
+        <p id="status" role="status" aria-live="polite"></p>
+        <p id="share" aria-live="polite"></p>
+      </div>
+    </div>
 
-      <button id="startBtn" aria-describedby="status">Create Session and Start Processing</button>
-      <button id="nextBtn" type="button" class="secondary hidden">Prepare Next Output</button>
-      <p id="status" role="status" aria-live="polite"></p>
-      <p id="share" aria-live="polite"></p>
-    </section>
+    <div class="hero-right">
+      <p class="cap-eyebrow" data-cap-eyebrow>END-TO-END AGENT PIPELINE</p>
+      <ul class="cap-list" id="capList">
+        <li><a href="#start"><span class="cap-arrow">▶</span><span data-cap="stitch">Stitch images into a gigapixel master</span></a></li>
+        <li><a href="/gallery"><span class="cap-arrow">▶</span><span data-cap="restore">Detect damage &amp; AI-restore condition</span></a></li>
+        <li><a href="/gallery"><span class="cap-arrow">▶</span><span data-cap="upscale">Upscale with tiled diffusion detail</span></a></li>
+        <li><a href="/gallery"><span class="cap-arrow">▶</span><span data-cap="splat">Turn a master into a 3D Gaussian splat</span></a></li>
+        <li><a href="/gallery"><span class="cap-arrow">▶</span><span data-cap="watermark">Watermark &amp; license for provenance</span></a></li>
+        <li><a href="/gallery"><span class="cap-arrow">▶</span><span data-cap="iiif">Publish &amp; cite via IIIF / Mirador</span></a></li>
+      </ul>
+    </div>
+  </section>
 
+  <!-- ===== Acquisition planner ===================================== -->
+  <section class="studio-section" id="planner">
     <section class="panel planner-panel" aria-labelledby="plannerTitle">
       <div class="planner-head">
         <div>
@@ -97,8 +128,11 @@
       <button id="calculatePlanBtn" type="button" class="secondary">Calculate Capture Plan</button>
       <div id="plannerResult" class="planner-result" aria-live="polite"></div>
     </section>
+  </section>
 
-    <section class="panel" id="galleryPanel" style="margin-top:var(--space-5)">
+  <!-- ===== Collection ============================================== -->
+  <section class="studio-section">
+    <section class="panel" id="galleryPanel">
       <div class="planner-head">
         <div>
           <h2 id="galleryTitle">Collection</h2>
@@ -108,7 +142,7 @@
       </div>
       <div id="sessionGallery" class="session-gallery"></div>
     </section>
-  </main>
+  </section>
 
   <style>
     .session-gallery { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:var(--space-3); margin-top:var(--space-3); }
@@ -126,9 +160,34 @@
   </style>
   <script>
     (function () {
+      const ko = (document.documentElement.getAttribute("data-lang") || "en") === "ko";
+
+      // Studio-specific copy localization (hero badge, capability list, CTA, nav).
+      if (ko) {
+        const set = (sel, txt) => { const el = document.querySelector(sel); if (el) el.textContent = txt; };
+        set("[data-cap-eyebrow]", "엔드투엔드 에이전트 파이프라인");
+        set('[data-cap="stitch"]', "이미지를 기가픽셀 마스터로 스티칭");
+        set('[data-cap="restore"]', "손상 탐지 후 AI로 상태 복원");
+        set('[data-cap="upscale"]', "타일드 디퓨전으로 디테일 업스케일");
+        set('[data-cap="splat"]', "마스터를 3D 가우시안 스플랫으로 변환");
+        set('[data-cap="watermark"]', "워터마크·라이선스로 출처 보증");
+        set('[data-cap="iiif"]', "IIIF · Mirador로 공개 및 인용");
+        set('[data-cta]', "프로젝트 시작");
+        set('[data-nav="planner"]', "플래너");
+        set('[data-nav="start"]', "시작");
+        const gl = document.getElementById("openGalleryLink"); if (gl) gl.textContent = "갤러리";
+      }
+
+      // Smooth-scroll the in-page anchors.
+      document.querySelectorAll('.studio-nav a[href^="#"], .studio-cta[href^="#"]').forEach((a) => {
+        a.addEventListener("click", (e) => {
+          const t = document.querySelector(a.getAttribute("href"));
+          if (t) { e.preventDefault(); t.scrollIntoView({ behavior: "smooth", block: "start" }); }
+        });
+      });
+
       const grid = document.getElementById("sessionGallery");
       const search = document.getElementById("gallerySearch");
-      const ko = (document.documentElement.getAttribute("data-lang") || "en") === "ko";
       if (ko) {
         document.getElementById("galleryTitle").textContent = "컬렉션";
         document.getElementById("gallerySubtitle").textContent = "처리된 세션과 상태·품질을 한눈에.";

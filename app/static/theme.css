@@ -26,29 +26,29 @@
   --color-surface-elevated: #ffffff;
   --color-border: #ded7c7;
   --color-border-strong: #c8bfa9;
-  --color-text-primary: #1b1e25;
-  --color-text-secondary: #6c6456;
-  --color-primary: #1c6b62;
-  --color-primary-hover: #155249;
-  --color-primary-soft: #dde9e5;
-  --color-on-primary: #fbf9f4;
+  --color-text-primary: #16131c;
+  --color-text-secondary: #6b6478;
+  --color-primary: #e3326b;
+  --color-primary-hover: #c8275a;
+  --color-primary-soft: #fce0ea;
+  --color-on-primary: #ffffff;
   --color-success: #2f7d57;
   --color-warning: #9a6a12;
-  --color-danger: #ad3a2c;
-  --color-info: #1c6b62;
+  --color-danger: #d23a4d;
+  --color-info: #e3326b;
 
-  --gold: #b3893c;
-  --grid-line: rgba(27, 30, 37, 0.045);
+  --gold: #8b5cf6;
+  --grid-line: rgba(120, 60, 130, 0.05);
 
   --shadow-sm: 0 1px 2px rgba(28, 31, 38, 0.06);
   --shadow-md: 0 1px 2px rgba(28, 31, 38, 0.05), 0 10px 26px rgba(40, 36, 25, 0.07);
   --shadow-lg: 0 2px 4px rgba(28, 31, 38, 0.06), 0 24px 56px rgba(40, 36, 25, 0.12);
-  --focus-ring: rgba(28, 107, 98, 0.32);
+  --focus-ring: rgba(227, 50, 107, 0.3);
 
-  --radius-sm: 6px;
-  --radius-md: 9px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
+  --radius-sm: 7px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
 
   --bg: var(--color-bg);
   --panel: var(--color-surface-elevated);
@@ -68,30 +68,30 @@
 /* ---- Dark (ink) ----------------------------------------------------- */
 [data-theme="dark"] {
   color-scheme: dark;
-  --color-bg: #14161c;
-  --color-surface: #1a1d25;
-  --color-surface-subtle: #16181f;
-  --color-surface-elevated: #1f232c;
-  --color-border: #2b2f3a;
-  --color-border-strong: #3b414f;
-  --color-text-primary: #ece9e1;
-  --color-text-secondary: #9a9488;
-  --color-primary: #46a89a;
-  --color-primary-hover: #5cbcae;
-  --color-primary-soft: #14302c;
-  --color-on-primary: #08130f;
-  --color-success: #54c08a;
-  --color-warning: #d2a23a;
-  --color-danger: #d2685b;
-  --color-info: #46a89a;
+  --color-bg: #0a0810;
+  --color-surface: #15111f;
+  --color-surface-subtle: #110d1a;
+  --color-surface-elevated: #1c1629;
+  --color-border: #2c2440;
+  --color-border-strong: #463a66;
+  --color-text-primary: #f3eefb;
+  --color-text-secondary: #a99fc4;
+  --color-primary: #ff4d8d;
+  --color-primary-hover: #ff6aa0;
+  --color-primary-soft: #2c1430;
+  --color-on-primary: #1a0712;
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --color-danger: #fb7185;
+  --color-info: #ff4d8d;
 
-  --gold: #c9a24e;
-  --grid-line: rgba(236, 233, 225, 0.035);
+  --gold: #a855f7;
+  --grid-line: rgba(180, 130, 255, 0.045);
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.4), 0 14px 32px rgba(0, 0, 0, 0.44);
   --shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.45), 0 28px 64px rgba(0, 0, 0, 0.55);
-  --focus-ring: rgba(70, 168, 154, 0.4);
+  --focus-ring: rgba(255, 77, 141, 0.38);
 
   --bg: var(--color-bg);
   --panel: var(--color-surface-elevated);
@@ -102,9 +102,9 @@
   --accent-hover: var(--color-primary-hover);
   --input-bg: var(--color-surface-elevated);
   --input-border: var(--color-border-strong);
-  --sidebar-bg: #161920;
-  --viewer-bg: #0c0e12;
-  --li-bg: #171a22;
+  --sidebar-bg: #120e1c;
+  --viewer-bg: #070510;
+  --li-bg: #171120;
   --li-border: var(--color-border);
 }
 
@@ -144,15 +144,16 @@ body::before {
 /* ---- Typography ----------------------------------------------------- */
 h1, h2, h3,
 #pageTitle, #viewerTitle, #brandTitle, #plannerTitle {
-  font-family: var(--font-serif);
-  font-weight: 600;
+  font-family: var(--font-sans);
+  font-weight: 750;
   color: var(--text);
-  letter-spacing: -0.012em;
+  letter-spacing: -0.02em;
 }
 h1, #pageTitle {
   font-size: clamp(30px, 4.6vw, 46px);
-  line-height: 1.06;
-  letter-spacing: -0.02em;
+  line-height: 1.04;
+  letter-spacing: -0.035em;
+  font-weight: 800;
 }
 #pageSubtitle, .planner-head p, .viewer-brand p {
   font-family: var(--font-sans);
@@ -171,13 +172,13 @@ h1, #pageTitle {
 .aether-brand {
   display: inline-flex;
   align-items: center;
-  gap: 11px;
+  gap: 10px;
   color: var(--text);
   text-decoration: none;
-  font-family: var(--font-serif);
-  font-weight: 600;
+  font-family: var(--font-sans);
+  font-weight: 700;
   font-size: 1.02rem;
-  letter-spacing: 0.005em;
+  letter-spacing: -0.01em;
 }
 .hga-logo {
   width: 30px;
@@ -303,7 +304,7 @@ label { font-family: var(--font-sans); font-weight: 600; letter-spacing: 0.005em
 
 /* eyebrow kicker above the page title */
 #pageTitle::before {
-  content: "ARCHIVAL IMAGING INSTRUMENT";
+  content: "AI HERITAGE STUDIO";
   display: block;
   font-family: var(--font-sans);
   font-size: 11px;
@@ -312,7 +313,7 @@ label { font-family: var(--font-sans); font-weight: 600; letter-spacing: 0.005em
   color: var(--accent);
   margin-bottom: 12px;
 }
-:root[data-lang="ko"] #pageTitle::before { content: "아카이브 이미징 인스트루먼트"; letter-spacing: 0.18em; }
+:root[data-lang="ko"] #pageTitle::before { content: "AI 헤리티지 스튜디오"; letter-spacing: 0.16em; }
 
 /* ---- Viewer tool buttons (injected by viewer.js) ------------------- */
 .smart-annotate-panel {

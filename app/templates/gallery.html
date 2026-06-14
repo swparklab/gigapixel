@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hyper Gigapixel Agent · Collection</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/theme.css" />
+  <style>
+    .wrap { max-width: 1280px; margin: 0 auto; padding: 22px 20px 60px; }
+    .gbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 18px; }
+    .gbar .grow { flex: 1; }
+    .gbar input, .gbar select { width: auto; min-height: 0; padding: 8px 11px; }
+    .gbar a.home { width: auto; min-height: 0; padding: 8px 14px; border-radius: var(--radius-md);
+      border: 1px solid var(--input-border); background: var(--color-surface-elevated); color: var(--text); text-decoration: none; font-weight: 600; }
+    .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+    .gcard { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius-md);
+      overflow: hidden; background: var(--color-surface); text-decoration: none; color: var(--text); transition: border-color .15s, box-shadow .2s, transform .15s; }
+    .gcard:hover { border-color: var(--accent); box-shadow: var(--shadow-md); transform: translateY(-2px); }
+    .gthumb { aspect-ratio: 4/3; background: var(--color-surface-subtle) center/cover no-repeat; }
+    .gbody { padding: 11px 13px; display: flex; flex-direction: column; gap: 6px; }
+    .gname { font-weight: 600; font-size: .95rem; line-height: 1.25; }
+    .gmeta { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; font-family: var(--font-mono); font-size: .72rem; color: var(--muted); }
+    .gbadge { padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line); }
+    .gbadge.ok { color: var(--color-success); border-color: var(--color-success); }
+    .gbadge.warn { color: var(--color-warning); border-color: var(--color-warning); }
+    .gbadge.broken { color: var(--color-danger); border-color: var(--color-danger); }
+    .gempty { color: var(--muted); grid-column: 1/-1; padding: 28px 0; text-align: center; }
+    .count { color: var(--muted); font-family: var(--font-mono); font-size: .8rem; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="topbar">
+      <div class="hga-brand">
+        <svg class="hga-logo" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="4.5" stroke="currentColor" stroke-width="1.4"/>
+          <path d="M12 5.2v3.1M12 15.7v3.1M5.2 12h3.1M15.7 12h3.1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          <circle cx="12" cy="12" r="3.1" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="12" r="0.95" fill="currentColor"/>
+        </svg>
+        <span class="hga-word">Hyper Gigapixel <b>Agent</b></span><span class="hga-sub">Collection</span>
+      </div>
+    </div>
+
+    <div class="gbar">
+      <input id="search" class="grow" type="search" placeholder="Search by name or tags" />
+      <select id="statusSel">
+        <option value="">All statuses</option>
+        <option value="ready" selected>Ready</option>
+        <option value="processing">Processing</option>
+        <option value="queued">Queued</option>
+        <option value="failed">Failed</option>
+      </select>
+      <span class="count" id="count"></span>
+      <a class="home" href="/">+ New session</a>
+    </div>
+
+    <div class="gallery" id="gallery"></div>
+  </main>
+
+  <script src="/static/ui-prefs.js"></script>
+  <script>
+    const grid = document.getElementById("gallery");
+    const search = document.getElementById("search");
+    const statusSel = document.getElementById("statusSel");
+    const countEl = document.getElementById("count");
+    const ko = (document.documentElement.getAttribute("data-lang") || "en") === "ko";
+    if (ko) {
+      document.querySelector(".hga-sub").textContent = "컬렉션";
+      search.placeholder = "이름/태그 검색";
+      statusSel.options[0].textContent = "전체 상태"; statusSel.options[1].textContent = "완료";
+      statusSel.options[2].textContent = "처리 중"; statusSel.options[3].textContent = "대기"; statusSel.options[4].textContent = "실패";
+      document.querySelector("a.home").textContent = "+ 새 세션";
+    }
+
+    async function load() {
+      const params = new URLSearchParams({ limit: "300" });
+      if (search.value.trim()) params.set("q", search.value.trim());
+      if (statusSel.value) params.set("status", statusSel.value);
+      try {
+        const rows = await (await fetch(`/api/sessions?${params}`)).json();
+        countEl.textContent = ko ? `${rows.length}개 세션` : `${rows.length} sessions`;
+        grid.innerHTML = "";
+        if (!rows.length) { grid.innerHTML = `<div class="gempty">${ko ? "세션이 없습니다." : "No sessions."}</div>`; return; }
+        rows.forEach((s) => {
+          const card = document.createElement("a"); card.className = "gcard"; card.href = `/viewer/${s.id}`;
+          const thumb = document.createElement("div"); thumb.className = "gthumb";
+          if (s.thumbnail_url) thumb.style.backgroundImage = `url(${s.thumbnail_url})`;
+          const body = document.createElement("div"); body.className = "gbody";
+          const name = document.createElement("div"); name.className = "gname"; name.textContent = s.name || s.id.slice(0, 8);
+          const meta = document.createElement("div"); meta.className = "gmeta";
+          const st = document.createElement("span"); st.className = "gbadge " + (s.quality_verdict || ""); st.textContent = s.quality_verdict || s.status; meta.appendChild(st);
+          if (s.width) { const d = document.createElement("span"); d.textContent = `${s.width}×${s.height}`; meta.appendChild(d); }
+          if (s.tags) { const t = document.createElement("span"); t.textContent = s.tags.split(",").slice(0, 2).join(" · "); meta.appendChild(t); }
+          body.appendChild(name); body.appendChild(meta);
+          card.appendChild(thumb); card.appendChild(body); grid.appendChild(card);
+        });
+      } catch (e) { grid.innerHTML = `<div class="gempty">${ko ? "불러오기 실패" : "Failed to load"}</div>`; }
+    }
+    let t; search.addEventListener("input", () => { clearTimeout(t); t = setTimeout(load, 220); });
+    statusSel.addEventListener("change", load);
+    load();
+  </script>
+</body>
+</html>

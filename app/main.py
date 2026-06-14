@@ -278,6 +278,11 @@ def viewer(request: Request, session_id: str):
     return templates.TemplateResponse(request, "viewer.html", {"session_id": session_id})
 
 
+@app.get("/gallery", response_class=HTMLResponse)
+def gallery_page(request: Request):
+    return templates.TemplateResponse("gallery.html", {"request": request})
+
+
 @app.get("/workflow", response_class=HTMLResponse)
 def workflow_page(request: Request):
     return templates.TemplateResponse(request, "workflow.html")

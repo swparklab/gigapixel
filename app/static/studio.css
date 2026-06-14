@@ -1,0 +1,110 @@
+/* =====================================================================
+   Studio landing — Silicon Valley AI-studio aesthetic (home page only).
+   Sticky top nav + a dark, cinematic 2-column hero (headline + start card |
+   capability list), then planner & collection sections that follow the theme.
+   ===================================================================== */
+
+body.studio { background: var(--color-bg); }
+body.studio::before { opacity: 0.6; }
+
+/* ---- Top navigation ------------------------------------------------- */
+.studio-nav {
+  position: sticky; top: 0; z-index: 50;
+  display: flex; align-items: center; gap: 22px;
+  padding: 13px clamp(18px, 4vw, 40px);
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--color-bg) 80%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+}
+.studio-nav .hga-brand { font-size: 1.05rem; }
+.studio-links { display: flex; gap: 24px; margin-left: 12px; }
+.studio-links a { color: var(--muted); text-decoration: none; font-weight: 600; font-size: 0.92rem; transition: color 0.15s; }
+.studio-links a:hover { color: var(--text); }
+.studio-nav-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+.studio-nav .prefs-bar { gap: 10px; }
+.studio-nav .prefs-group label { font-size: 10px; }
+.studio-nav select { min-height: 0; padding: 6px 8px; font-size: 0.82rem; }
+.studio-cta {
+  display: inline-flex; align-items: center; white-space: nowrap;
+  padding: 9px 18px; border-radius: 999px; font-weight: 700; text-decoration: none;
+  color: var(--color-on-primary); background: var(--accent);
+  box-shadow: 0 8px 22px rgba(255, 77, 141, 0.35);
+}
+.studio-cta:hover { background: var(--accent-hover); }
+
+/* ---- Cinematic hero (always dark) ----------------------------------- */
+.studio-hero {
+  position: relative; overflow: hidden;
+  display: grid; grid-template-columns: 1.05fr 0.95fr; gap: clamp(28px, 5vw, 56px);
+  align-items: center; padding: clamp(40px, 6vw, 76px) clamp(20px, 5vw, 56px);
+  color: #f3eefb;
+  background:
+    radial-gradient(58vmax 48vmax at 80% 4%, rgba(255, 77, 141, 0.30), transparent 60%),
+    radial-gradient(52vmax 52vmax at 98% 78%, rgba(139, 92, 246, 0.30), transparent 62%),
+    radial-gradient(42vmax 42vmax at 6% 96%, rgba(120, 40, 130, 0.24), transparent 60%),
+    linear-gradient(180deg, #0d0814, #150b1e 58%, #0a0611);
+}
+.studio-hero::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 3px 3px; mix-blend-mode: screen;
+}
+.hero-left { position: relative; z-index: 2; max-width: 580px; }
+.hero-right { position: relative; z-index: 2; }
+.hero-badge {
+  display: inline-block; margin-bottom: 18px; padding: 5px 14px; border-radius: 999px;
+  font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.03em;
+  color: #ffb8d2; background: rgba(255, 77, 141, 0.12); border: 1px solid rgba(255, 77, 141, 0.32);
+}
+.hero-left #pageTitle { color: #ffffff; font-size: clamp(34px, 4.6vw, 58px); line-height: 1.0; letter-spacing: -0.04em; margin: 0 0 16px; }
+.hero-left #pageTitle::before { color: #ff7bab; }
+.hero-left #pageSubtitle { color: #cbbfe6; max-width: 520px; margin: 0 0 26px; font-size: 1.04rem; line-height: 1.55; }
+
+/* start card (functional form, styled for the dark hero) */
+.start-card {
+  background: rgba(255, 255, 255, 0.045); border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 18px; padding: 22px; box-shadow: 0 32px 72px rgba(0, 0, 0, 0.5);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+}
+.start-card label { color: #ddd4f0; margin-top: 14px; }
+.start-card label:first-of-type { margin-top: 0; }
+.start-card input, .start-card select {
+  background: rgba(8, 6, 14, 0.55) !important; border: 1px solid rgba(255, 255, 255, 0.14) !important; color: #f3eefb !important;
+}
+.start-card input::placeholder { color: #8b82a6; }
+.start-card input::file-selector-button { background: rgba(255,255,255,.08); color: #f3eefb; border: none; border-radius: 8px; padding: 6px 10px; margin-right: 10px; cursor: pointer; }
+.start-card input:focus-visible, .start-card select:focus-visible {
+  border-color: var(--accent) !important; box-shadow: 0 0 0 3px rgba(255, 77, 141, 0.3) !important; outline: none !important;
+}
+.start-actions { display: flex; gap: 10px; margin-top: 18px; }
+.start-actions button { margin-top: 0; }
+.start-actions #startBtn { flex: 1; box-shadow: 0 10px 30px rgba(255, 77, 141, 0.38); }
+.start-card #status:not(:empty), .start-card #share:not(:empty) {
+  background: rgba(8, 6, 14, 0.5) !important; border-color: rgba(255, 255, 255, 0.12) !important; color: #f3eefb !important;
+}
+
+/* capability list (right) */
+.cap-eyebrow { font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.16em; color: #ff7bab; margin: 0 0 8px; }
+.cap-list { list-style: none; margin: 0; padding: 0; }
+.cap-list li { border-bottom: 1px solid rgba(255, 255, 255, 0.09); }
+.cap-list a, .cap-list span.cap-row {
+  display: flex; align-items: center; gap: 14px; padding: 15px 6px; width: 100%;
+  color: #b9aed6; font-size: clamp(17px, 1.9vw, 22px); font-weight: 650; letter-spacing: -0.01em;
+  text-decoration: none; transition: color 0.18s ease, padding-left 0.18s ease;
+}
+.cap-list a:hover, .cap-list span.cap-row:hover { color: #ffffff; padding-left: 14px; }
+.cap-arrow { color: var(--accent); font-size: 0.78em; opacity: 0; transform: translateX(-8px); transition: opacity 0.18s, transform 0.18s; }
+.cap-list a:hover .cap-arrow, .cap-list span.cap-row:hover .cap-arrow { opacity: 1; transform: translateX(0); }
+
+/* ---- Sections below the hero --------------------------------------- */
+.studio-section { max-width: 1180px; margin: 0 auto; padding: clamp(28px, 4vw, 44px) clamp(18px, 4vw, 28px); }
+.studio-section .panel, .studio-section .planner-panel { margin: 0; }
+.studio-section .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.studio-section .section-head h2 { margin: 0; font-size: 1.5rem; }
+.studio-section .section-head p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+
+@media (max-width: 920px) {
+  .studio-hero { grid-template-columns: 1fr; }
+  .studio-links { display: none; }
+}
