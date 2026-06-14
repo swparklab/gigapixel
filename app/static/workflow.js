@@ -833,18 +833,18 @@ function isLightTheme() {
 function applyCanvasTheme() {
   if (!graphCanvas) return;
   const light = isLightTheme();
-  // Solid themed fill behind the nodes: white-ish in light, deep navy in dark.
+  // Solid themed fill behind the nodes: warm paper in light, ink in dark.
   graphCanvas.background_image = null;
   graphCanvas.render_canvas_border = false;
   graphCanvas.clear_background = true;
-  graphCanvas.clear_background_color = light ? "#f4f7fc" : "#0a0f1d";
+  graphCanvas.clear_background_color = light ? "#f3efe7" : "#14161c";
   // Node chrome / link contrast that reads on both backgrounds.
   if (LGraphCanvas) {
     if (LGraphCanvas.node_title_color !== undefined) {
-      LGraphCanvas.node_title_color = light ? "#1a2540" : "#e6eeff";
+      LGraphCanvas.node_title_color = light ? "#1b1e25" : "#ece9e1";
     }
     if (LGraphCanvas.link_color !== undefined) {
-      LGraphCanvas.link_color = light ? "#6b7a99" : "#9fb0d0";
+      LGraphCanvas.link_color = light ? "#6c6456" : "#9a9488";
     }
   }
   graphCanvas.setDirty(true, true);

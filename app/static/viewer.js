@@ -459,27 +459,27 @@ function injectSmartControls() {
   const segBtn = document.createElement("button");
   segBtn.id = "smartAnnotateBtn";
   segBtn.type = "button";
+  segBtn.className = "hga-tool-btn";
   segBtn.textContent = currentLang() === "ko" ? "🪄 스마트 주석" : "🪄 Smart annotate";
   segBtn.title = currentLang() === "ko" ? "켠 뒤 객체를 클릭하면 AI가 윤곽을 분할합니다 (Shift+클릭도 가능)" : "Toggle, then click an object to segment its outline (or Shift+Click)";
-  segBtn.style.cssText = "padding:6px 10px;border-radius:6px;cursor:pointer;border:1px solid #444;background:#1f2937;color:#fff;";
   segBtn.addEventListener("click", () => {
     smartMode = !smartMode;
-    segBtn.style.background = smartMode ? "#2563eb" : "#1f2937";
+    segBtn.classList.toggle("is-active", smartMode);
   });
 
   const dmgBtn = document.createElement("button");
   dmgBtn.id = "detectDamageBtn";
   dmgBtn.type = "button";
+  dmgBtn.className = "hga-tool-btn";
   dmgBtn.textContent = currentLang() === "ko" ? "🩹 손상 탐지" : "🩹 Detect damage";
-  dmgBtn.style.cssText = segBtn.style.cssText + "background:#374151;";
   dmgBtn.addEventListener("click", () => detectDamageInView().catch(() => {}));
 
   const ko0 = currentLang() === "ko";
   const mkBtn = (label, handler) => {
     const b = document.createElement("button");
     b.type = "button";
+    b.className = "hga-tool-btn";
     b.textContent = label;
-    b.style.cssText = segBtn.style.cssText + "background:#312e81;";
     b.addEventListener("click", () => handler().catch(() => {}));
     return b;
   };
@@ -532,8 +532,6 @@ function injectSmartControls() {
     a.rel = "noopener";
     a.textContent = label;
     a.className = "aether-report-link";
-    a.style.cssText =
-      "padding:5px 10px;border-radius:999px;font-size:0.78rem;text-decoration:none;border:1px solid var(--color-border-strong,#456);background:var(--color-surface-subtle,#1c243a);color:var(--color-text-primary,#eaf1ff);";
     reports.appendChild(a);
   });
   host.appendChild(reports);

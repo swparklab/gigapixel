@@ -1,308 +1,371 @@
 /* =====================================================================
-   Hyper Gigapixel Agent — HYPER·GIGA  ·  3D / neon design system
-   Loaded after the base stylesheet. Re-skins the whole app by overriding
-   design tokens and layering glass, depth, glow and an ambient background.
-   (Internal class names keep the `aether-` prefix for stability.)
+   Hyper Gigapixel Agent — Brand Design System
+   ---------------------------------------------------------------------
+   Editorial / archival-instrument identity for gigapixel heritage imaging.
+   Palette: ink + warm paper + a single signature accent (verdigris, the
+   patina of aged bronze) with a restrained gold micro-accent. Serif display
+   for editorial gravitas, a clean grotesk for UI, mono for measurements.
+   No glass blur, no neon, no animated gradients — quiet precision.
+   Loaded after styles.css; overrides design tokens + refines components.
    ===================================================================== */
 
+/* ---- Type system ---------------------------------------------------- */
+:root {
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Georgia, "Nanum Myeongjo", Batang, "Times New Roman", serif;
+  --font-sans: system-ui, -apple-system, "Segoe UI", "Pretendard", "Noto Sans KR", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Cascadia Code", "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+/* ---- Light (paper) -------------------------------------------------- */
 :root,
-[data-theme="dark"] {
-  --color-bg: #060912;
-  --color-surface: rgba(20, 27, 45, 0.62);
-  --color-surface-subtle: rgba(28, 36, 58, 0.55);
-  --color-surface-elevated: rgba(30, 40, 66, 0.78);
-  --color-border: rgba(120, 150, 210, 0.18);
-  --color-border-strong: rgba(140, 175, 240, 0.34);
-  --color-text-primary: #eaf1ff;
-  --color-text-secondary: #9fb0d0;
-  --color-primary: #5b8cff;
-  --color-primary-hover: #6f9bff;
-  --color-primary-soft: rgba(91, 140, 255, 0.16);
-  --color-on-primary: #061024;
-  --color-success: #34e0a1;
-  --color-warning: #ffce5c;
-  --color-danger: #ff6b8b;
-  --color-info: #57c7ff;
-
-  --aether-accent-1: #57c7ff;
-  --aether-accent-2: #7b5bff;
-  --aether-accent-3: #34e0a1;
-  --aether-glass-blur: 18px;
-  --aether-glass-stroke: linear-gradient(135deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.02) 40%, rgba(123, 91, 255, 0.25));
-
-  --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 14px 40px rgba(2, 6, 20, 0.55);
-  --shadow-lg: 0 30px 80px rgba(2, 6, 23, 0.65);
-
-  --radius-md: 14px;
-  --radius-lg: 18px;
-  --radius-xl: 26px;
-}
-
 [data-theme="light"] {
-  --color-bg: #eef2fb;
-  --color-surface: rgba(255, 255, 255, 0.72);
-  --color-surface-subtle: rgba(236, 242, 252, 0.8);
-  --color-surface-elevated: rgba(255, 255, 255, 0.9);
-  --color-border: rgba(80, 110, 170, 0.18);
-  --color-border-strong: rgba(70, 100, 165, 0.32);
-  --color-text-primary: #15203a;
-  --color-text-secondary: #5a6b88;
-  --color-primary: #3b6ef5;
-  --color-primary-hover: #2f5be0;
-  --color-primary-soft: rgba(59, 110, 245, 0.12);
-  --color-on-primary: #ffffff;
-  --aether-glass-blur: 16px;
-  --aether-glass-stroke: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(120, 150, 230, 0.08) 45%, rgba(123, 91, 255, 0.22));
-  --shadow-md: 0 16px 44px rgba(40, 70, 140, 0.16);
-  --shadow-lg: 0 30px 70px rgba(40, 70, 140, 0.2);
+  color-scheme: light;
+  --color-bg: #f3efe7;
+  --color-surface: #fbf9f4;
+  --color-surface-subtle: #ece7da;
+  --color-surface-elevated: #ffffff;
+  --color-border: #ded7c7;
+  --color-border-strong: #c8bfa9;
+  --color-text-primary: #1b1e25;
+  --color-text-secondary: #6c6456;
+  --color-primary: #1c6b62;
+  --color-primary-hover: #155249;
+  --color-primary-soft: #dde9e5;
+  --color-on-primary: #fbf9f4;
+  --color-success: #2f7d57;
+  --color-warning: #9a6a12;
+  --color-danger: #ad3a2c;
+  --color-info: #1c6b62;
+
+  --gold: #b3893c;
+  --grid-line: rgba(27, 30, 37, 0.045);
+
+  --shadow-sm: 0 1px 2px rgba(28, 31, 38, 0.06);
+  --shadow-md: 0 1px 2px rgba(28, 31, 38, 0.05), 0 10px 26px rgba(40, 36, 25, 0.07);
+  --shadow-lg: 0 2px 4px rgba(28, 31, 38, 0.06), 0 24px 56px rgba(40, 36, 25, 0.12);
+  --focus-ring: rgba(28, 107, 98, 0.32);
+
+  --radius-sm: 6px;
+  --radius-md: 9px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  --bg: var(--color-bg);
+  --panel: var(--color-surface-elevated);
+  --text: var(--color-text-primary);
+  --muted: var(--color-text-secondary);
+  --line: var(--color-border);
+  --accent: var(--color-primary);
+  --accent-hover: var(--color-primary-hover);
+  --input-bg: var(--color-surface-elevated);
+  --input-border: var(--color-border-strong);
+  --sidebar-bg: var(--color-surface);
+  --viewer-bg: #2a2620;
+  --li-bg: var(--color-surface);
+  --li-border: var(--color-border);
 }
 
-/* ---- base canvas + ambient background ------------------------------- */
+/* ---- Dark (ink) ----------------------------------------------------- */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --color-bg: #14161c;
+  --color-surface: #1a1d25;
+  --color-surface-subtle: #16181f;
+  --color-surface-elevated: #1f232c;
+  --color-border: #2b2f3a;
+  --color-border-strong: #3b414f;
+  --color-text-primary: #ece9e1;
+  --color-text-secondary: #9a9488;
+  --color-primary: #46a89a;
+  --color-primary-hover: #5cbcae;
+  --color-primary-soft: #14302c;
+  --color-on-primary: #08130f;
+  --color-success: #54c08a;
+  --color-warning: #d2a23a;
+  --color-danger: #d2685b;
+  --color-info: #46a89a;
+
+  --gold: #c9a24e;
+  --grid-line: rgba(236, 233, 225, 0.035);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.4), 0 14px 32px rgba(0, 0, 0, 0.44);
+  --shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.45), 0 28px 64px rgba(0, 0, 0, 0.55);
+  --focus-ring: rgba(70, 168, 154, 0.4);
+
+  --bg: var(--color-bg);
+  --panel: var(--color-surface-elevated);
+  --text: var(--color-text-primary);
+  --muted: var(--color-text-secondary);
+  --line: var(--color-border);
+  --accent: var(--color-primary);
+  --accent-hover: var(--color-primary-hover);
+  --input-bg: var(--color-surface-elevated);
+  --input-border: var(--color-border-strong);
+  --sidebar-bg: #161920;
+  --viewer-bg: #0c0e12;
+  --li-bg: #171a22;
+  --li-border: var(--color-border);
+}
+
+/* ---- Base canvas ---------------------------------------------------- */
 html { scroll-behavior: smooth; }
 
 body {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.55;
+  letter-spacing: 0.005em;
   background: var(--color-bg);
-  color: var(--color-text-primary);
-  font-family: "Inter", "SF Pro Display", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--text);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   position: relative;
   min-height: 100vh;
-  overflow-x: hidden;
 }
 
-/* Aurora mesh + drifting light blobs */
+/* Brand motif: a faint archival measurement grid, softly vignetted. */
 body::before {
-  content: "";
-  position: fixed;
-  inset: -20vmax;
-  z-index: -2;
-  background:
-    radial-gradient(38vmax 38vmax at 18% 12%, rgba(87, 199, 255, 0.20), transparent 60%),
-    radial-gradient(42vmax 42vmax at 82% 18%, rgba(123, 91, 255, 0.22), transparent 62%),
-    radial-gradient(46vmax 46vmax at 70% 92%, rgba(52, 224, 161, 0.16), transparent 60%),
-    radial-gradient(40vmax 40vmax at 12% 88%, rgba(91, 140, 255, 0.18), transparent 60%);
-  filter: blur(8px) saturate(120%);
-  animation: aether-drift 26s ease-in-out infinite alternate;
-}
-
-/* Fine engineering grid for depth */
-body::after {
   content: "";
   position: fixed;
   inset: 0;
   z-index: -1;
   background-image:
-    linear-gradient(rgba(130, 160, 220, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(130, 160, 220, 0.05) 1px, transparent 1px);
-  background-size: 46px 46px, 46px 46px;
-  mask-image: radial-gradient(circle at 50% 30%, #000 0%, transparent 78%);
-  animation: aether-grid 40s linear infinite;
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 64px 64px;
+  -webkit-mask-image: radial-gradient(135% 90% at 50% -10%, #000 35%, transparent 82%);
+  mask-image: radial-gradient(135% 90% at 50% -10%, #000 35%, transparent 82%);
   pointer-events: none;
 }
 
-[data-theme="light"] body::before { filter: blur(10px) saturate(135%); opacity: 0.85; }
+::selection { background: var(--color-primary-soft); color: var(--accent); }
 
-@keyframes aether-drift {
-  0%   { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
-  50%  { transform: translate3d(2%, -2%, 0) rotate(4deg) scale(1.06); }
-  100% { transform: translate3d(-2%, 2%, 0) rotate(-3deg) scale(1.04); }
+/* ---- Typography ----------------------------------------------------- */
+h1, h2, h3,
+#pageTitle, #viewerTitle, #brandTitle, #plannerTitle {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.012em;
 }
-@keyframes aether-grid {
-  from { background-position: 0 0, 0 0; }
-  to   { background-position: 46px 920px, 920px 46px; }
+h1, #pageTitle {
+  font-size: clamp(30px, 4.6vw, 46px);
+  line-height: 1.06;
+  letter-spacing: -0.02em;
+}
+#pageSubtitle, .planner-head p, .viewer-brand p {
+  font-family: var(--font-sans);
+  color: var(--muted);
+  letter-spacing: 0;
 }
 
-/* ---- brand wordmark ------------------------------------------------- */
+/* numerals / metrics in mono for an instrument feel */
+.planner-metrics dd, .planner-table td, .vwr-badge, .planner-badge, #zoomBadge,
+.aether-report-link, .hga-tool-btn {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Brand wordmark + logo ----------------------------------------- */
+.hga-brand,
 .aether-brand {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  font-size: 0.92rem;
-  text-transform: uppercase;
-  color: var(--color-text-primary);
+  gap: 11px;
+  color: var(--text);
+  text-decoration: none;
+  font-family: var(--font-serif);
+  font-weight: 600;
+  font-size: 1.02rem;
+  letter-spacing: 0.005em;
 }
-.aether-brand .aether-mark {
+.hga-logo {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+.hga-word { white-space: nowrap; }
+.hga-word b { font-weight: 600; color: var(--accent); }
+.hga-sub,
+.aether-sub {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding-left: 11px;
+  margin-left: 3px;
+  border-left: 1px solid var(--line);
+}
+/* legacy glyph mark -> tidy monogram chip */
+.aether-mark {
   display: inline-grid;
   place-items: center;
-  width: 30px; height: 30px;
-  border-radius: 10px;
-  background: conic-gradient(from 140deg, var(--aether-accent-1), var(--aether-accent-2), var(--aether-accent-3), var(--aether-accent-1));
-  color: #07101f;
-  font-size: 1rem;
-  box-shadow: 0 0 0 1px rgba(255,255,255,0.18) inset, 0 6px 22px rgba(87,199,255,0.4);
-  animation: aether-spin 14s linear infinite;
-}
-.aether-brand .aether-sub {
-  font-weight: 500;
-  letter-spacing: 0.05em;
-  text-transform: none;
-  color: var(--color-text-secondary);
-  font-size: 0.78rem;
-}
-@keyframes aether-spin { to { transform: rotate(360deg); } }
-
-/* ---- glass surfaces ------------------------------------------------- */
-.panel,
-.planner-panel,
-.viewer-shell,
-.viewer-topbar,
-.viewer-sidebar,
-.wf-topbar,
-.viewer-stage,
-.planner-result,
-.osd-toolbar {
-  background: var(--color-surface);
-  backdrop-filter: blur(var(--aether-glass-blur)) saturate(140%);
-  -webkit-backdrop-filter: blur(var(--aether-glass-blur)) saturate(140%);
-  border: 1px solid transparent;
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  position: relative;
+  width: 28px; height: 28px;
+  border-radius: 7px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: 0.95rem;
+  font-style: normal;
 }
 
-/* gradient hairline border via mask */
-.panel::before,
-.planner-panel::before,
-.viewer-shell::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  background: var(--aether-glass-stroke);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  pointer-events: none;
-  opacity: 0.8;
+/* ---- Surfaces / panels --------------------------------------------- */
+.panel, .planner-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 160ms ease, box-shadow 200ms ease;
+}
+.panel:hover, .planner-panel:hover {
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-md);
+}
+.planner-summary-card, .planner-table-wrap, .planner-metrics div {
+  background: var(--color-surface-subtle);
+  border-color: var(--line);
 }
 
-/* 3D hover lift on cards */
-.panel,
-.planner-panel {
-  transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.35s ease;
-  transform-style: preserve-3d;
-}
-.panel:hover,
-.planner-panel:hover {
-  transform: translateY(-4px) perspective(1200px) rotateX(1.2deg);
-  box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-}
-
-/* ---- headings ------------------------------------------------------- */
-h1, #pageTitle, #viewerTitle, #brandTitle {
-  background: linear-gradient(100deg, var(--color-text-primary) 10%, var(--aether-accent-1) 55%, var(--aether-accent-2) 90%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  letter-spacing: -0.01em;
-  font-weight: 800;
-}
-h2 { letter-spacing: -0.01em; }
-
-/* ---- buttons -------------------------------------------------------- */
-button,
-.mode-link {
-  border-radius: 12px;
-  font-weight: 650;
+/* ---- Buttons -------------------------------------------------------- */
+button {
+  font-family: var(--font-sans);
+  font-weight: 600;
   letter-spacing: 0.01em;
-  transition: transform 0.18s ease, box-shadow 0.25s ease, filter 0.2s ease;
-}
-button:not(.secondary):not(.ghost):not(.danger),
-#startBtn,
-#calculatePlanBtn:not(.secondary) {
+  border-radius: var(--radius-md);
+  background: var(--accent);
   color: var(--color-on-primary);
-  background: linear-gradient(135deg, var(--aether-accent-1), var(--aether-accent-2));
-  border: none;
-  box-shadow: 0 10px 30px rgba(91, 140, 255, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  box-shadow: none;
+  transition: background-color 150ms ease, border-color 150ms ease, transform 120ms ease, color 150ms ease;
 }
-button:hover { transform: translateY(-2px); filter: brightness(1.06); }
-button:active { transform: translateY(0); }
-#startBtn { position: relative; overflow: hidden; }
-#startBtn::after {
-  content: "";
-  position: absolute; inset: 0;
-  background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.35) 50%, transparent 70%);
-  transform: translateX(-120%);
-  animation: aether-sheen 4.5s ease-in-out infinite;
-}
-@keyframes aether-sheen { 0%, 60% { transform: translateX(-120%); } 100% { transform: translateX(120%); } }
+button:hover:not(:disabled) { background: var(--accent-hover); transform: none; }
+button:active:not(:disabled) { transform: translateY(0.5px); }
 
 .secondary, .ghost {
-  background: var(--color-surface-subtle) !important;
-  border: 1px solid var(--color-border-strong) !important;
-  color: var(--color-text-primary) !important;
-  backdrop-filter: blur(8px);
+  background: var(--color-surface-elevated);
+  color: var(--text);
+  border: 1px solid var(--input-border);
+}
+.secondary:hover:not(:disabled), .ghost:hover:not(:disabled) {
+  background: var(--color-surface-subtle);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .mode-link {
-  background: var(--color-primary-soft);
-  border: 1px solid var(--color-border-strong);
-  color: var(--color-text-primary);
-  box-shadow: 0 0 24px rgba(87, 199, 255, 0.18);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--input-border);
+  color: var(--text);
+  border-radius: var(--radius-md);
 }
+.mode-link:hover { background: var(--color-surface-subtle); border-color: var(--accent); color: var(--accent); }
 
-/* ---- inputs --------------------------------------------------------- */
+/* ---- Inputs --------------------------------------------------------- */
 input, select, textarea {
-  background: var(--color-surface-subtle) !important;
-  border: 1px solid var(--color-border) !important;
-  color: var(--color-text-primary) !important;
-  border-radius: 12px !important;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  font-family: var(--font-sans);
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-md);
+  color: var(--text);
 }
-input:focus, select:focus, textarea:focus {
-  outline: none !important;
-  border-color: var(--aether-accent-1) !important;
-  box-shadow: 0 0 0 3px var(--color-primary-soft), 0 0 22px rgba(87, 199, 255, 0.25) !important;
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
+label { font-family: var(--font-sans); font-weight: 600; letter-spacing: 0.005em; }
 
-/* ---- status pills / badges ----------------------------------------- */
-#status, #share, .planner-badge, .badge, .status-badge {
+/* ---- Badges / pills ------------------------------------------------- */
+.planner-badge, .vwr-badge {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: 0.02em;
   border-radius: 999px;
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--input-border);
+  color: var(--muted);
 }
-.planner-badge {
-  background: linear-gradient(135deg, var(--color-primary-soft), transparent);
-  border: 1px solid var(--color-border-strong);
-  box-shadow: 0 0 18px rgba(123, 91, 255, 0.18);
-}
+.planner-badge { color: var(--accent); background: var(--color-primary-soft); border-color: transparent; }
 
-/* ---- viewer specifics ---------------------------------------------- */
-#openseadragon {
+/* ---- Chrome: topbars / sidebar ------------------------------------- */
+.viewer-topbar, .wf-topbar {
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border-bottom: 1px solid var(--line);
+  box-shadow: none;
+  -webkit-backdrop-filter: saturate(120%) blur(6px);
+  backdrop-filter: saturate(120%) blur(6px);
+}
+.sidebar { background: var(--sidebar-bg); border-right: 1px solid var(--line); }
+.viewer-brand h1 { font-size: 19px; }
+
+/* eyebrow kicker above the page title */
+#pageTitle::before {
+  content: "ARCHIVAL IMAGING INSTRUMENT";
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  color: var(--accent);
+  margin-bottom: 12px;
+}
+:root[data-lang="ko"] #pageTitle::before { content: "아카이브 이미징 인스트루먼트"; letter-spacing: 0.18em; }
+
+/* ---- Viewer tool buttons (injected by viewer.js) ------------------- */
+.smart-annotate-panel {
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
-  overflow: hidden;
+  padding: 8px !important;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
-.smart-annotate-panel button {
-  backdrop-filter: blur(10px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+.hga-tool-btn {
+  padding: 7px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid var(--input-border);
+  background: var(--color-surface-elevated);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  font-weight: 600;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
 }
+.hga-tool-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--color-surface-subtle); }
+.hga-tool-btn.is-active { background: var(--accent); color: var(--color-on-primary); border-color: var(--accent); }
+.aether-report-link {
+  padding: 5px 11px !important;
+  border-radius: 999px !important;
+  font-size: 0.76rem !important;
+  font-family: var(--font-mono) !important;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  border: 1px solid var(--input-border) !important;
+  background: var(--color-surface-elevated) !important;
+  color: var(--muted) !important;
+  transition: border-color 150ms ease, color 150ms ease;
+}
+.aether-report-link:hover { border-color: var(--accent) !important; color: var(--accent) !important; }
 
-/* ---- scrollbars ----------------------------------------------------- */
-* { scrollbar-width: thin; scrollbar-color: rgba(123, 91, 255, 0.5) transparent; }
+/* ---- Links / misc --------------------------------------------------- */
+a { color: var(--accent); text-underline-offset: 2px; }
+.annotation-marker { background: var(--gold); border-color: var(--color-surface-elevated); }
+
+/* ---- Scrollbars ----------------------------------------------------- */
+* { scrollbar-width: thin; scrollbar-color: var(--color-border-strong) transparent; }
 *::-webkit-scrollbar { width: 10px; height: 10px; }
 *::-webkit-scrollbar-thumb {
-  background: linear-gradient(var(--aether-accent-2), var(--aether-accent-1));
+  background: var(--color-border-strong);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 
-/* ---- workflow chrome ------------------------------------------------ */
-.wf-topbar { border-radius: 0 0 var(--radius-xl) var(--radius-xl); }
-
-/* ---- entrance animation -------------------------------------------- */
-.panel, .planner-panel, .viewer-shell, .wf-topbar {
-  animation: aether-rise 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
-.planner-panel { animation-delay: 0.08s; }
-@keyframes aether-rise {
-  from { opacity: 0; transform: translateY(18px) scale(0.99); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  body::before, body::after, .aether-brand .aether-mark, #startBtn::after,
-  .panel, .planner-panel, .viewer-shell, .wf-topbar { animation: none !important; }
+  html { scroll-behavior: auto; }
 }
