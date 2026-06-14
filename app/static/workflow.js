@@ -537,6 +537,7 @@ function applyTranslations() {
   updateRolePermissionHint();
   updateSelectedBadge();
   updateZoomBadge();
+  applyCanvasTheme();
   renderLibrary();
   renderInspector();
 
@@ -823,6 +824,30 @@ function decorateCanvasColors() {
   if (LGraphCanvas && LGraphCanvas.link_type_colors) {
     Object.assign(LGraphCanvas.link_type_colors, TYPE_COLORS);
   }
+}
+
+function isLightTheme() {
+  return (document.documentElement.getAttribute("data-theme") || "dark") === "light";
+}
+
+function applyCanvasTheme() {
+  if (!graphCanvas) return;
+  const light = isLightTheme();
+  // Solid themed fill behind the nodes: white-ish in light, deep navy in dark.
+  graphCanvas.background_image = null;
+  graphCanvas.render_canvas_border = false;
+  graphCanvas.clear_background = true;
+  graphCanvas.clear_background_color = light ? "#f4f7fc" : "#0a0f1d";
+  // Node chrome / link contrast that reads on both backgrounds.
+  if (LGraphCanvas) {
+    if (LGraphCanvas.node_title_color !== undefined) {
+      LGraphCanvas.node_title_color = light ? "#1a2540" : "#e6eeff";
+    }
+    if (LGraphCanvas.link_color !== undefined) {
+      LGraphCanvas.link_color = light ? "#6b7a99" : "#9fb0d0";
+    }
+  }
+  graphCanvas.setDirty(true, true);
 }
 
 function registerNodeTypes() {
@@ -1495,9 +1520,7 @@ function initGraph() {
   registerNodeTypes();
   graph = new LGraph();
   graphCanvas = new LGraphCanvas(el.graphCanvas, graph);
-  graphCanvas.background_image = null;
-  graphCanvas.render_canvas_border = false;
-  graphCanvas.clear_background = false;
+  applyCanvasTheme();
 
   graphCanvas.onNodeSelected = (node) => {
     selectedNode = node || null;
