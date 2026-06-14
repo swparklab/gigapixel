@@ -180,6 +180,187 @@ def write_gaussian_ply(points: np.ndarray, colors: np.ndarray, path: Path) -> No
         f.write(data.tobytes())
 
 
+def write_splat(points: np.ndarray, colors: np.ndarray, path: Path, scale: float = 0.004) -> None:
+    """Write the antimatter15 ``.splat`` format (32 bytes/gaussian), the de-facto
+    interchange format for web 3D Gaussian Splatting viewers."""
+    n = len(points)
+    buf = np.zeros((n, 32), dtype=np.uint8)
+    buf[:, 0:12] = np.ascontiguousarray(points.astype("<f4")).view(np.uint8).reshape(n, 12)
+    buf[:, 12:24] = np.ascontiguousarray(np.full((n, 3), scale, "<f4")).view(np.uint8).reshape(n, 12)
+    buf[:, 24:27] = colors.astype(np.uint8)          # RGB
+    buf[:, 27] = 255                                  # alpha
+    buf[:, 28] = 255                                  # quaternion w
+    buf[:, 29:32] = 128                               # quaternion x,y,z (identity)
+    path.write_bytes(buf.tobytes())
+
+
+def normal_map_from_depth(depth: np.ndarray, strength: float) -> np.ndarray:
+    """Tangent-space normal map (BGR uint8) encoding the surface relief."""
+    z = depth.astype(np.float32) * (strength * float(max(depth.shape)) * 0.15)
+    dzdx = cv2.Sobel(z, cv2.CV_32F, 1, 0, ksize=3)
+    dzdy = cv2.Sobel(z, cv2.CV_32F, 0, 1, ksize=3)
+    normals = np.dstack([-dzdx, -dzdy, np.ones_like(z)])
+    norm = np.linalg.norm(normals, axis=2, keepdims=True)
+    normals = normals / np.maximum(norm, 1e-6)
+    encoded = ((normals * 0.5 + 0.5) * 255.0).astype(np.uint8)
+    return cv2.cvtColor(encoded, cv2.COLOR_RGB2BGR)
+
+
+def write_relief_mesh(bgr: np.ndarray, depth: np.ndarray, output_base: Path, log: LogFn = _noop) -> dict:
+    """Build a textured displacement (relief) mesh from the image + depth.
+
+    Emits ``mesh.obj`` + ``mesh.mtl`` + ``mesh_texture.jpg`` (loadable in
+    Blender / Unity / web) and, when ``trimesh`` is available, a ``mesh.glb``.
+    """
+    h, w = depth.shape[:2]
+    max_dim = max(64, int(settings.to3d_mesh_max_dim))
+    scale = min(1.0, max_dim / float(max(h, w)))
+    gh, gw = max(2, int(h * scale)), max(2, int(w * scale))
+    d = cv2.resize(depth.astype(np.float32), (gw, gh), interpolation=cv2.INTER_AREA)
+    aspect = h / float(w)
+    amp = float(settings.splat_depth_strength)
+
+    xs = (np.arange(gw) / (gw - 1) - 0.5).astype(np.float32)
+    ys = (-(np.arange(gh) / (gh - 1) - 0.5) * aspect).astype(np.float32)
+    gx, gy = np.meshgrid(xs, ys)
+    verts = np.stack([gx.ravel(), gy.ravel(), (d * amp).ravel()], axis=1)
+    u = (np.arange(gw) / (gw - 1)).astype(np.float32)
+    v = (1.0 - np.arange(gh) / (gh - 1)).astype(np.float32)
+    uu, vv = np.meshgrid(u, v)
+    uvs = np.stack([uu.ravel(), vv.ravel()], axis=1)
+
+    faces = []
+    for j in range(gh - 1):
+        for i in range(gw - 1):
+            a = j * gw + i
+            b = a + 1
+            c = a + gw
+            dd = c + 1
+            faces.append((a, b, c))
+            faces.append((b, dd, c))
+    faces = np.array(faces, dtype=np.int64)
+
+    tex_path = output_base / "mesh_texture.jpg"
+    cv2.imencode(".jpg", bgr, [cv2.IMWRITE_JPEG_QUALITY, 92])[1].tofile(str(tex_path))
+
+    obj_path = output_base / "mesh.obj"
+    mtl_path = output_base / "mesh.mtl"
+    mtl_path.write_text(
+        "newmtl heritage\nKa 1 1 1\nKd 1 1 1\nmap_Kd mesh_texture.jpg\n", encoding="utf-8"
+    )
+    lines = ["mtllib mesh.mtl", "usemtl heritage"]
+    lines += [f"v {x:.6f} {y:.6f} {z:.6f}" for x, y, z in verts]
+    lines += [f"vt {a:.6f} {b:.6f}" for a, b in uvs]
+    # OBJ is 1-indexed; vertex and texture indices coincide here.
+    lines += [f"f {a + 1}/{a + 1} {b + 1}/{b + 1} {c + 1}/{c + 1}" for a, b, c in faces]
+    obj_path.write_text("\n".join(lines), encoding="utf-8")
+
+    artifacts = {"mesh_obj": obj_path, "mesh_mtl": mtl_path, "mesh_texture": tex_path}
+
+    try:
+        import trimesh  # type: ignore
+        from PIL import Image
+
+        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+        visual = trimesh.visual.TextureVisuals(uv=uvs, image=Image.fromarray(rgb))
+        mesh = trimesh.Trimesh(vertices=verts, faces=faces, visual=visual, process=False)
+        glb_path = output_base / "mesh.glb"
+        mesh.export(str(glb_path))
+        artifacts["mesh_glb"] = glb_path
+    except Exception as exc:  # pragma: no cover - optional
+        log(f"[3d] glb export skipped: {exc}")
+
+    log(f"[3d] relief mesh: {len(verts)} verts, {len(faces)} faces")
+    return artifacts
+
+
+def _deep_image_to_3d(bgr: np.ndarray, output_base: Path, log: LogFn) -> dict | None:
+    """Latest single-image-to-3D object generators (TRELLIS / Hunyuan3D)."""
+    backend = str(settings.to3d_backend).lower()
+    if backend not in ("auto", "trellis", "hunyuan3d"):
+        return None
+    try:
+        from PIL import Image
+
+        rgb = Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
+        try:
+            from trellis.pipelines import TrellisImageTo3DPipeline  # type: ignore
+
+            pipe = TrellisImageTo3DPipeline.from_pretrained("microsoft/TRELLIS-image-large")
+            pipe.cuda()
+            out = pipe.run(rgb)
+            gs_path = output_base / "reconstruction_gaussians.ply"
+            out["gaussian"][0].save_ply(str(gs_path))
+            glb_path = output_base / "mesh.glb"
+            out["mesh"][0].export(str(glb_path))
+            log("[3d] TRELLIS image-to-3D produced gaussians + mesh")
+            return {"gaussian": gs_path, "mesh_glb": glb_path, "backend": "trellis"}
+        except Exception as exc:
+            log(f"[3d] TRELLIS unavailable: {exc}")
+            return None
+    except Exception:
+        return None
+
+
+def build_3d(bgr: np.ndarray, representation: str, output_base: Path, log: LogFn = _noop) -> dict:
+    """Produce the requested 3D representation(s) from a single image.
+
+    representation: splat | pointcloud | gaussian | mesh | depth | normals | all
+    Returns {"representation", "depth_backend", "artifacts": {name: Path}, ...}.
+    """
+    representation = (representation or settings.to3d_default_representation).lower()
+    wants = {"splat", "pointcloud", "gaussian", "mesh", "depth", "normals"}
+    selected = wants if representation == "all" else {representation}
+    artifacts: dict[str, Path] = {}
+
+    # Deep object generators (when requested + installed) cover splat/gaussian/mesh.
+    deep = None
+    if selected & {"splat", "gaussian", "mesh"}:
+        deep = _deep_image_to_3d(bgr, output_base, log)
+
+    depth, depth_backend = estimate_depth(bgr, log)
+    points, colors = build_points(bgr, depth, int(settings.splat_max_points))
+
+    if "pointcloud" in selected:
+        p = output_base / "pointcloud.ply"
+        write_pointcloud_ply(points, colors, p)
+        artifacts["pointcloud"] = p
+    if "gaussian" in selected and (deep is None or "gaussian" not in deep):
+        p = output_base / "gaussians.ply"
+        write_gaussian_ply(points, colors, p)
+        artifacts["gaussian"] = p
+    if "splat" in selected:
+        p = output_base / "scene.splat"
+        write_splat(points, colors, p)
+        artifacts["splat"] = p
+        # also emit gaussian ply so PLY-based viewers work
+        gp = output_base / "gaussians.ply"
+        write_gaussian_ply(points, colors, gp)
+        artifacts.setdefault("gaussian", gp)
+    if "mesh" in selected and (deep is None or "mesh_glb" not in deep):
+        artifacts.update(write_relief_mesh(bgr, depth, output_base, log))
+    if "depth" in selected:
+        p = output_base / "depth.png"
+        cv2.imencode(".png", (np.clip(depth, 0, 1) * 255).astype(np.uint8))[1].tofile(str(p))
+        artifacts["depth"] = p
+    if "normals" in selected:
+        p = output_base / "normal_map.png"
+        cv2.imencode(".png", normal_map_from_depth(depth, float(settings.splat_depth_strength)))[1].tofile(str(p))
+        artifacts["normals"] = p
+
+    if deep:
+        for key in ("gaussian", "mesh_glb"):
+            if key in deep:
+                artifacts[key] = deep[key]
+
+    return {
+        "representation": representation,
+        "depth_backend": (deep or {}).get("backend", depth_backend),
+        "num_points": int(len(points)),
+        "artifacts": artifacts,
+    }
+
+
 def generate_splat(bgr: np.ndarray, output_base: Path, log: LogFn = _noop) -> SplatResult:
     depth, backend = estimate_depth(bgr, log)
     points, colors = build_points(bgr, depth, int(settings.splat_max_points))

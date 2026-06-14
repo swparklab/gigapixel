@@ -21,6 +21,7 @@ This project is designed for digital heritage acquisition and restoration workfl
 - Robust global bundle adjustment (iteratively reweighted Huber least squares) for globally consistent alignment.
 - Focus-robust registration: per-image sharpness normalization for consistent keypoints, plus optical-flow elastic overlap alignment that removes the ghosting/"breaking" caused by focus or detected-point mismatch.
 - Interactive local upscaling: pick a factor on the finished mosaic and run a high-quality upscale (ComfyUI Flux / diffusers SD-x4 / Real-ESRGAN / Lanczos).
+- Versatile image-to-3D: turn the mosaic into 3D Gaussian Splatting (`.ply`/`.splat`), a textured relief mesh (`.obj`/`.glb`), or depth/normal maps, explorable in-browser with a real Gaussian-splat renderer and a mesh viewer (optional TRELLIS / Hunyuan3D backends).
 - Tiled multi-band blending that preserves multi-band quality at gigapixel scale instead of degrading to feather compositing.
 - Automatic output quality control (interior-hole, coverage, sharpness, seam, registration, and learned no-reference quality checks) with an `ok`/`warn`/`broken` verdict and a `quality_report.json` sidecar.
 - Automatic repair of enclosed holes via inpainting (optional LaMa deep backend, classical fallback).
@@ -347,6 +348,30 @@ Two improvements for messy real-world gigapixel sets.
 Verification: **51 tests pass**, including local-alignment residual reduction
 and classical upscale scaling.
 
+## Update Notes — Versatile Image-to-3D (3DGS)
+
+The full chain is now **images → stitch → gigapixel mosaic → 3D**. From the
+finished mosaic, [`splat.py`](app/services/splat.py) (`POST .../to3d`,
+representation = `splat`/`mesh`/`gaussian`/`pointcloud`/`depth`/`normals`/`all`)
+produces:
+
+- **3D Gaussian Splatting** — `gaussians.ply` (INRIA format) and `scene.splat`
+  (antimatter15 interchange format) for web/desktop splat viewers.
+- **Textured relief mesh** — `mesh.obj` + `.mtl` + texture, and `mesh.glb` (when
+  `trimesh` is installed) for Blender / Unity / web / AR.
+- **Depth** and **tangent-space normal** maps.
+
+The 3D explorer ([`viewer3d.html`](app/templates/viewer3d.html)) now renders
+**real Gaussian splats** (via `@mkkellogg/gaussian-splats-3d`) and meshes (via
+`<model-viewer>`), with a representation selector + **Build 3D** button and
+download links. Depth is estimated by Depth-Anything / MiDaS when installed,
+else a relief model; setting `TO3D_BACKEND=trellis` (or `hunyuan3d`) routes
+single-image object generation through those models when present.
+
+Assets are served under `GET /api/sessions/{id}/3d/{file}` (`.splat`, `.ply`,
+`.obj`, `.mtl`, `.glb`, `.png`, `.jpg`). Verification: **53 tests pass**,
+including `.splat` geometry and textured-mesh export.
+
 ## Project Status
 
 This repository is an active research and engineering prototype.
@@ -540,6 +565,7 @@ The agent emits structured JSON logs. Example:
 | Queue status | `GET /api/sessions/{session_id}/queue` |
 | Outpaint | `POST /api/sessions/{session_id}/outpaint` · `/download/outpainted` · `/outpaint-mask` |
 | Upscale | `POST /api/sessions/{session_id}/upscale` · `/download/upscaled` |
+| Image-to-3D | `POST /api/sessions/{session_id}/to3d` · assets at `/3d/{file}` · explorer `/viewer3d/{id}` |
 
 ## Typical Workflow
 

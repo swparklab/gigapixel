@@ -213,6 +213,20 @@ class UpscaleResponse(BaseModel):
     image_url: str
 
 
+class To3DRequest(BaseModel):
+    representation: str = Field(
+        default="splat", pattern="^(splat|pointcloud|gaussian|mesh|depth|normals|all)$"
+    )
+
+
+class To3DResponse(BaseModel):
+    ok: bool
+    representation: str
+    depth_backend: str
+    num_points: int
+    artifacts: dict[str, str]
+
+
 class ProcessRequest(BaseModel):
     mode: str = Field(default="scans", pattern="^(scans|panorama)$")
 

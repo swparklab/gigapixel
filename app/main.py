@@ -42,6 +42,8 @@ from .schemas import (
     SessionCreate,
     SessionRead,
     SplatResponse,
+    To3DRequest,
+    To3DResponse,
     UpscaleRequest,
     UpscaleResponse,
 )
@@ -763,6 +765,57 @@ def get_pointcloud(session_id: str, db: Session = Depends(get_db)):
 @app.get(f"{settings.api_prefix}/sessions/{{session_id}}/gaussians.ply")
 def get_gaussians(session_id: str, db: Session = Depends(get_db)):
     return _serve_sidecar(session_id, db, "gaussians.ply", "application/octet-stream")
+
+
+_3D_MEDIA = {
+    ".splat": "application/octet-stream",
+    ".ply": "application/octet-stream",
+    ".obj": "text/plain",
+    ".mtl": "text/plain",
+    ".glb": "model/gltf-binary",
+    ".jpg": "image/jpeg",
+    ".png": "image/png",
+}
+
+
+@app.post(f"{settings.api_prefix}/sessions/{{session_id}}/to3d", response_model=To3DResponse)
+def to3d_endpoint(session_id: str, payload: To3DRequest, db: Session = Depends(get_db)):
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.status != "ready":
+        raise HTTPException(status_code=409, detail="Session is not ready yet")
+
+    from .services.splat import build_3d
+
+    bgr = _read_raw_bgr(session, max_dim=2400)
+    result = build_3d(bgr, payload.representation, output_dir(session_id))
+    api = settings.api_prefix
+    artifacts = {
+        name: f"{api}/sessions/{session_id}/3d/{Path(path).name}"
+        for name, path in result["artifacts"].items()
+    }
+    return To3DResponse(
+        ok=True,
+        representation=result["representation"],
+        depth_backend=result["depth_backend"],
+        num_points=result["num_points"],
+        artifacts=artifacts,
+    )
+
+
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/3d/{{filename}}")
+def get_3d_asset(session_id: str, filename: str, db: Session = Depends(get_db)):
+    if not db.get(SessionModel, session_id):
+        raise HTTPException(status_code=404, detail="Session not found")
+    name = Path(filename).name  # prevent path traversal
+    media = _3D_MEDIA.get(Path(name).suffix.lower())
+    if media is None:
+        raise HTTPException(status_code=400, detail="Unsupported 3D asset type")
+    path = output_dir(session_id) / name
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="3D asset not available")
+    return FileResponse(path, media_type=media)
 
 
 @app.get("/viewer3d/{session_id}", response_class=HTMLResponse)

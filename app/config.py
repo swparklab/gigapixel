@@ -236,6 +236,15 @@ class Settings(BaseSettings):
     splat_depth_strength: float = 0.35    # relief depth amplitude (0..1)
     splat_format: str = "both"            # pointcloud | gaussian | both
 
+    # --- Image-to-3D representations (3DGS, mesh, depth, normals) -------------
+    # Default artefact built by the /to3d endpoint and the 3D explorer.
+    #   splat | pointcloud | gaussian | mesh | depth | normals | all
+    to3d_default_representation: str = "splat"
+    to3d_mesh_max_dim: int = 1400         # grid resolution cap for the relief mesh
+    # Deep single-image-to-3D object generator when available.
+    #   auto | trellis | hunyuan3d | depth (depth = relief surface, always works)
+    to3d_backend: str = "depth"
+
     # --- Job queue robustness ------------------------------------------------
     job_lease_seconds: int = 600          # a claimed job is "stale" past this
     job_heartbeat_seconds: int = 15       # worker heartbeat cadence

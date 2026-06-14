@@ -242,6 +242,8 @@ Important distinction: classic processing uses a queued polling agent. Node work
 | `GET` | `/api/sessions/{session_id}/queue` | Queue position + job status |
 | `POST` | `/api/sessions/{session_id}/outpaint` | Generative border-fill / extend |
 | `POST` | `/api/sessions/{session_id}/upscale` | Interactive local upscale (factor) |
+| `POST` | `/api/sessions/{session_id}/to3d` | Image-to-3D (splat / mesh / depth / normals) |
+| `GET` | `/api/sessions/{session_id}/3d/{file}` | Serve 3D assets (.splat/.ply/.obj/.glb/...) |
 | `GET` | `/api/sessions/{session_id}/tiles/{tile_path}` | Serve DZI tile |
 | `GET` | `/api/sessions/{session_id}/annotations` | List annotations |
 | `POST` | `/api/sessions/{session_id}/annotations` | Create annotation |

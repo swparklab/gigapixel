@@ -113,6 +113,37 @@ def test_outpaint_extend_grows_canvas_and_flags_ring():
     assert float(result.image[5, 230].mean()) > 5.0         # mirror-filled margin, not black
 
 
+def test_build_3d_emits_splat_mesh_and_maps():
+    import tempfile
+
+    from app.services.splat import build_3d
+
+    tmp = Path(tempfile.mkdtemp())
+    img = _heritage(240, 320)
+    result = build_3d(img, "all", tmp)
+    art = result["artifacts"]
+    # .splat is the antimatter15 32-bytes-per-gaussian interchange format
+    splat = Path(art["splat"])
+    assert splat.stat().st_size % 32 == 0 and splat.stat().st_size // 32 == result["num_points"]
+    # textured relief mesh
+    obj = Path(art["mesh_obj"]).read_text()
+    assert "\nv " in "\n" + obj and "vt " in obj and "\nf " in "\n" + obj and "mtllib" in obj
+    assert (tmp / "mesh_texture.jpg").exists()
+    # depth + normal maps
+    assert Path(art["depth"]).exists() and Path(art["normals"]).exists()
+
+
+def test_splat_only_representation():
+    import tempfile
+
+    from app.services.splat import build_3d
+
+    tmp = Path(tempfile.mkdtemp())
+    result = build_3d(_heritage(160, 200), "splat", tmp)
+    assert "splat" in result["artifacts"] and "gaussian" in result["artifacts"]
+    assert Path(result["artifacts"]["splat"]).suffix == ".splat"
+
+
 def test_interactive_upscale_scales_by_factor():
     from app.config import settings
     from app.services.upscale import upscale_image

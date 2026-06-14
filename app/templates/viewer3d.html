@@ -7,28 +7,42 @@
   <link rel="stylesheet" href="/static/theme.css" />
   <style>
     html, body { margin: 0; height: 100%; overflow: hidden; }
-    #scene { position: fixed; inset: 0; }
-    .hud {
-      position: fixed; top: 16px; left: 16px; z-index: 5;
-      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
-    }
-    .hud .panelbox {
-      padding: 10px 14px; border-radius: var(--radius-lg);
+    #stage { position: fixed; inset: 0; }
+    #splatHost { position: absolute; inset: 0; }
+    model-viewer { position: absolute; inset: 0; width: 100%; height: 100%; background: transparent; }
+    .hud { position: fixed; top: 16px; left: 16px; right: 16px; z-index: 5;
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .panelbox { padding: 9px 13px; border-radius: var(--radius-lg);
       background: color-mix(in srgb, var(--color-surface) 90%, transparent);
-      backdrop-filter: blur(10px);
-      border: 1px solid var(--color-border); box-shadow: var(--shadow-md);
-    }
-    .hud button {
-      padding: 8px 14px; border-radius: var(--radius-md); cursor: pointer; border: 1px solid var(--accent);
-      color: var(--color-on-primary); font-weight: 600; background: var(--accent);
-    }
+      backdrop-filter: blur(10px); border: 1px solid var(--color-border); box-shadow: var(--shadow-md); }
+    .hud select, .hud button { width: auto; min-height: 0; padding: 7px 11px; font-size: 0.84rem; }
+    .hud button { border: 1px solid var(--accent); background: var(--accent); color: var(--color-on-primary); font-weight: 600; border-radius: var(--radius-md); cursor: pointer; }
     .hud button:hover { background: var(--accent-hover); }
-    #status { color: var(--color-text-secondary); font-size: 0.85rem; font-family: var(--font-mono); }
+    .hud .links { display: flex; gap: 8px; flex-wrap: wrap; }
+    .hud .links a { font-family: var(--font-mono); font-size: 0.74rem; text-decoration: none;
+      padding: 4px 9px; border-radius: 999px; border: 1px solid var(--color-border-strong); color: var(--muted); }
+    .hud .links a:hover { border-color: var(--accent); color: var(--accent); }
+    #status { color: var(--color-text-secondary); font-size: 0.84rem; font-family: var(--font-mono); }
     a.back { color: var(--color-text-primary); text-decoration: none; }
+    .spacer { flex: 1; }
   </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+      "@mkkellogg/gaussian-splats-3d": "https://unpkg.com/@mkkellogg/gaussian-splats-3d@0.4.4/build/gaussian-splats-3d.module.js"
+    }
+  }
+  </script>
+  <script type="module" src="https://unpkg.com/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
 </head>
 <body>
-  <div id="scene"></div>
+  <div id="stage">
+    <div id="splatHost"></div>
+    <model-viewer id="meshHost" camera-controls touch-action="pan-y" exposure="1.0" shadow-intensity="0.6" hidden></model-viewer>
+  </div>
+
   <div class="hud">
     <div class="panelbox hga-brand">
       <svg class="hga-logo" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -40,79 +54,112 @@
       <span class="hga-word">Hyper Gigapixel <b>Agent</b></span>
       <span class="hga-sub">3D Explorer</span>
     </div>
-    <div class="panelbox"><button id="genBtn">Generate / Regenerate 3D</button></div>
+    <div class="panelbox" style="display:flex;gap:8px;align-items:center">
+      <select id="repSel">
+        <option value="splat">3D Gaussian Splatting</option>
+        <option value="mesh">Relief mesh (3D)</option>
+        <option value="all">All representations</option>
+      </select>
+      <button id="buildBtn">Build 3D</button>
+    </div>
     <div class="panelbox"><span id="status">Loading…</span></div>
-    <div class="panelbox"><a class="back" href="/viewer/{{ session_id }}">&larr; Back to viewer</a></div>
+    <div class="spacer"></div>
+    <div class="panelbox links" id="downloads"></div>
+    <div class="panelbox"><a class="back" href="/viewer/{{ session_id }}">&larr; Viewer</a></div>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-  <script src="https://unpkg.com/three@0.128.0/examples/js/loaders/PLYLoader.js"></script>
-  <script>
+  <script type="module">
+    import * as GaussianSplats3D from "@mkkellogg/gaussian-splats-3d";
+
     const sessionId = "{{ session_id }}";
+    const api = `/api/sessions/${sessionId}`;
     const statusEl = document.getElementById("status");
-    const host = document.getElementById("scene");
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
-    host.appendChild(renderer.domElement);
-
-    const scene = new THREE.Scene();
+    const splatHost = document.getElementById("splatHost");
+    const meshHost = document.getElementById("meshHost");
+    const downloads = document.getElementById("downloads");
     const isLight = (document.documentElement.getAttribute("data-theme") || "dark") === "light";
-    scene.background = new THREE.Color(isLight ? 0xf3efe7 : 0x14161c);
-    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.001, 100);
-    camera.position.set(0, 0, 1.2);
-    const controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
+    const bg = isLight ? 0xf3efe7 : 0x14161c;
 
-    let pointsObject = null;
+    let splatViewer = null;
 
-    function loadCloud() {
-      statusEl.textContent = "Loading point cloud…";
-      const loader = new THREE.PLYLoader();
-      loader.load(
-        `/api/sessions/${sessionId}/pointcloud.ply?t=${Date.now()}`,
-        (geometry) => {
-          geometry.computeBoundingBox();
-          geometry.center();
-          if (pointsObject) scene.remove(pointsObject);
-          const material = new THREE.PointsMaterial({ size: 0.0016, vertexColors: true, sizeAttenuation: true });
-          pointsObject = new THREE.Points(geometry, material);
-          scene.add(pointsObject);
-          statusEl.textContent = `${geometry.attributes.position.count.toLocaleString()} points`;
-        },
-        undefined,
-        () => { statusEl.textContent = "No 3D yet — click Generate."; }
-      );
+    function setStatus(t) { statusEl.textContent = t; }
+
+    function showMesh(url) {
+      splatHost.hidden = true;
+      meshHost.hidden = false;
+      meshHost.src = url;
+      setStatus("Relief mesh loaded — drag to orbit.");
     }
 
-    async function generate() {
-      statusEl.textContent = "Estimating depth & building 3D…";
+    async function disposeSplats() {
+      if (splatViewer) {
+        try { await splatViewer.dispose(); } catch (e) {}
+        splatViewer = null;
+      }
+      splatHost.innerHTML = "";
+    }
+
+    async function showSplats(url) {
+      meshHost.hidden = true;
+      splatHost.hidden = false;
+      await disposeSplats();
       try {
-        const res = await fetch(`/api/sessions/${sessionId}/splat`, { method: "POST" });
-        const data = await res.json();
-        statusEl.textContent = `Built ${data.num_points.toLocaleString()} primitives (depth: ${data.depth_backend})`;
-        loadCloud();
+        splatViewer = new GaussianSplats3D.Viewer({
+          rootElement: splatHost,
+          backgroundColor: bg,
+          cameraUp: [0, -1, 0],
+          initialCameraPosition: [0, 0, -1.6],
+          initialCameraLookAt: [0, 0, 0],
+          sharedMemoryForWorkers: false,
+        });
+        await splatViewer.addSplatScene(url, { showLoadingUI: true, splatAlphaRemovalThreshold: 5 });
+        splatViewer.start();
+        setStatus("3D Gaussian Splatting — drag to orbit, scroll to zoom.");
       } catch (e) {
-        statusEl.textContent = "Generation failed.";
+        setStatus("Splat renderer unavailable; download the .ply/.splat below.");
       }
     }
 
-    document.getElementById("genBtn").addEventListener("click", generate);
-    window.addEventListener("resize", () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    });
+    function renderLinks(map) {
+      downloads.innerHTML = "";
+      const order = [["splat", ".splat"], ["gaussian", "gaussian.ply"], ["mesh_glb", "mesh.glb"],
+                     ["mesh_obj", "mesh.obj"], ["pointcloud", "pointcloud.ply"], ["depth", "depth"], ["normals", "normals"]];
+      order.forEach(([k, label]) => {
+        if (map[k]) {
+          const a = document.createElement("a");
+          a.href = map[k]; a.textContent = label; a.target = "_blank"; a.rel = "noopener";
+          downloads.appendChild(a);
+        }
+      });
+    }
 
-    (function animate() {
-      requestAnimationFrame(animate);
-      controls.update();
-      renderer.render(scene, camera);
+    async function build(representation) {
+      setStatus("Estimating depth & building 3D…");
+      const res = await fetch(`${api}/to3d`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ representation }),
+      });
+      const data = await res.json();
+      renderLinks(data.artifacts || {});
+      setStatus(`Built ${data.num_points.toLocaleString()} primitives (depth: ${data.depth_backend}).`);
+      if (data.artifacts.mesh_glb && representation === "mesh") showMesh(data.artifacts.mesh_glb);
+      else if (data.artifacts.gaussian) await showSplats(data.artifacts.gaussian);
+      else if (data.artifacts.splat) await showSplats(data.artifacts.splat);
+    }
+
+    document.getElementById("buildBtn").addEventListener("click", () =>
+      build(document.getElementById("repSel").value).catch(() => setStatus("Build failed.")));
+
+    // Try to load an existing gaussian scene; otherwise prompt to build.
+    (async () => {
+      const probe = await fetch(`${api}/3d/gaussians.ply`, { method: "HEAD" }).catch(() => null);
+      if (probe && probe.ok) {
+        renderLinks({ gaussian: `${api}/3d/gaussians.ply`, splat: `${api}/3d/scene.splat`, mesh_glb: `${api}/3d/mesh.glb` });
+        await showSplats(`${api}/3d/gaussians.ply`);
+      } else {
+        setStatus("Click “Build 3D” to generate a 3D scene from this mosaic.");
+      }
     })();
-
-    loadCloud();
   </script>
 </body>
 </html>
