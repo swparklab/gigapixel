@@ -13,6 +13,7 @@ const TYPE_COLORS = {
   int: "#ff9f1c",
   float: "#9b5de5",
   url: "#06d6a0",
+  stage: "#5b8cff",
 };
 
 const ROLE_CONFIG = {
@@ -959,6 +960,48 @@ function registerNodeTypes() {
     this.addOutput("url", "url");
   }
   LiteGraph.registerNodeType("workflow/download", DownloadNode);
+
+  // Display-only "stage" node: documents what the agent does inside RunPipeline.
+  // It is never executed by the server (not flow-reachable, type ignored), it
+  // exists purely to render the agent architecture as a diagram.
+  function StageNode() {
+    this.title = "Stage";
+    this.color = "#1b2a4a";
+    this.bgcolor = "#16223e";
+    this.addInput("in", "stage");
+    this.addOutput("out", "stage");
+    this.properties = { step: "", desc: "", lane: "pipeline" };
+    this.size = [200, 66];
+  }
+  StageNode.prototype.onDrawForeground = function (ctx) {
+    if (this.flags && this.flags.collapsed) return;
+    ctx.save();
+    if (this.properties.step) {
+      ctx.fillStyle = "rgba(123,150,255,0.9)";
+      ctx.font = "bold 10px Inter, system-ui, sans-serif";
+      ctx.fillText(String(this.properties.step), 10, 34);
+    }
+    ctx.fillStyle = "rgba(210,224,255,0.8)";
+    ctx.font = "11px Inter, system-ui, sans-serif";
+    const maxW = this.size[0] - 18;
+    const words = String(this.properties.desc || "").split(" ");
+    let line = "";
+    let y = 50;
+    for (const word of words) {
+      const test = line ? `${line} ${word}` : word;
+      if (ctx.measureText(test).width > maxW && line) {
+        ctx.fillText(line, 10, y);
+        y += 13;
+        line = word;
+        if (y > this.size[1] + 8) { line = ""; break; }
+      } else {
+        line = test;
+      }
+    }
+    if (line) ctx.fillText(line, 10, y);
+    ctx.restore();
+  };
+  LiteGraph.registerNodeType("display/stage", StageNode);
 }
 
 function setNodeVisualState(nodeId, state) {
@@ -1003,15 +1046,16 @@ function seedGraph(options = {}) {
   graph.clear();
   selectedNode = null;
 
+  // --- Executable backbone (this actually runs on the agent) ---------------
   const start = LiteGraph.createNode("workflow/start");
   const upload = LiteGraph.createNode("data/upload_ref");
   const runPipeline = LiteGraph.createNode("workflow/run_pipeline");
   const download = LiteGraph.createNode("workflow/download");
 
-  start.pos = [80, 90];
-  upload.pos = [80, 275];
-  runPipeline.pos = [430, 100];
-  download.pos = [790, 145];
+  start.pos = [40, 40];
+  upload.pos = [40, 210];
+  runPipeline.pos = [380, 70];
+  download.pos = [740, 70];
 
   graph.add(start);
   graph.add(upload);
@@ -1030,6 +1074,68 @@ function seedGraph(options = {}) {
     runPipeline.properties.upload_id = selectedUploadId;
     setWidgetValue(runPipeline, "fallback_upload", selectedUploadId);
   }
+
+  // --- Agent architecture diagram (display-only stage nodes) ---------------
+  const lang = currentLang();
+  const P = (en, ko) => (lang === "ko" ? ko : en);
+
+  function makeStage(step, title, desc, x, y, color) {
+    const node = LiteGraph.createNode("display/stage");
+    node.title = title;
+    node.properties.step = step;
+    node.properties.desc = desc;
+    node.pos = [x, y];
+    if (color) {
+      node.color = color;
+      node.bgcolor = color;
+    }
+    graph.add(node);
+    return node;
+  }
+
+  // What RunPipeline performs internally, in order.
+  const pipeline = [
+    ["01", P("Acquire", "획득"), P("Upload · EXIF · lens correction", "업로드 · EXIF · 렌즈보정")],
+    ["02", P("Register", "정합"), P("LoFTR · SIFT · DINOv2 retrieval", "LoFTR · SIFT · DINOv2 검색")],
+    ["03", P("Bundle Adjust", "번들조정"), P("Huber IRLS global BA", "Huber IRLS 전역 BA")],
+    ["04", P("Blend", "블렌딩"), P("Tiled multi-band + gain", "타일 멀티밴드 + 게인")],
+    ["05", P("Color", "컬러"), P("ColorChecker · ΔE2000 · FADGI", "컬러차트 · ΔE2000 · FADGI")],
+    ["06", P("Quality", "품질"), P("Holes · sharpness · IQA", "구멍 · 선명도 · IQA")],
+    ["07", P("Repair", "보강"), P("Inpaint (LaMa / Telea)", "인페인팅 (LaMa / Telea)")],
+    ["08", P("Provenance", "출처"), P("Coverage · synthetic · uncertainty", "커버리지 · 합성 · 불확실도")],
+    ["09", P("Export", "내보내기"), P("BigTIFF · JPEG · DZI", "BigTIFF · JPEG · DZI")],
+    ["10", P("IIIF", "IIIF"), P("Image API 3.0 · manifest", "Image API 3.0 · 매니페스트")],
+    ["11", P("Manifest", "매니페스트"), P("SHA-256 · Dublin Core", "SHA-256 · Dublin Core")],
+  ];
+  const laneHead = makeStage("▶", P("Agent Pipeline", "에이전트 파이프라인"),
+    P("RunPipeline executes these stages", "RunPipeline 내부 단계"), 40, 360, "#3b2f6b");
+  laneHead.size = [220, 60];
+
+  const stageNodes = [];
+  const COLS = 6;
+  const STEP_X = 220;
+  const ROW_Y = [440, 580];
+  pipeline.forEach((s, i) => {
+    const row = Math.floor(i / COLS);
+    const col = i % COLS;
+    const node = makeStage(s[0], s[1], s[2], 40 + col * STEP_X, ROW_Y[row]);
+    stageNodes.push(node);
+    if (i > 0) stageNodes[i - 1].connect(0, node, 0);
+  });
+
+  // Agent intelligence capabilities that branch off Export (on-demand actions).
+  const intel = [
+    [P("Condition AI", "조건분석"), P("Cracks · discolouration", "균열 · 변색")],
+    [P("AI Restore", "AI복원"), P("De-colour / crack / noise", "변색·균열·노이즈")],
+    [P("Image→3D", "이미지→3D"), P("Depth · Gaussian splat", "깊이 · 가우시안 스플랫")],
+    [P("Multi-view 3D", "멀티뷰 3D"), P("Fused reconstruction", "융합 복원")],
+    [P("Semantic", "의미검색"), P("CLIP tags · search", "CLIP 태그 · 검색")],
+  ];
+  const exportNode = stageNodes[8];
+  intel.forEach((c, i) => {
+    const node = makeStage("AI", c[0], c[1], 40 + i * STEP_X, 720, "#0f4c43");
+    if (exportNode) exportNode.connect(0, node, 0);
+  });
 
   graphCanvas.setDirty(true, true);
   fitGraphView();

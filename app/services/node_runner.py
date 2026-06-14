@@ -169,6 +169,12 @@ class GraphRunner:
 
         await self._node_state(node_id, "running")
 
+        # Display-only diagram nodes document the agent architecture and are not
+        # executable; acknowledge and skip them so richer graphs still run.
+        if node_type.startswith("display/") or node_type in {"annotation", "comment"}:
+            await self._node_state(node_id, "done")
+            return
+
         if node_type == "workflow/start":
             session_name = str(self._get_prop(node, "session_name", f"{flow_name}_{uuid.uuid4().hex[:8]}"))
             stitch_mode = str(self._get_prop(node, "stitch_mode", "scans"))
