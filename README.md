@@ -26,6 +26,7 @@ This project is designed for digital heritage acquisition and restoration workfl
 - Rights protection & authentication (KOCCA pillar): an invisible DCT watermark embedding a per-recipient identifier, perceptual-hash tamper detection / leak tracing, AES-256-GCM encrypted packaging, ARK persistent identifiers, and LIDO / Dublin Core XML export.
 - Material reproduction: roughness and gloss/specular maps from surface relief, and a synchronized side-by-side comparison viewer (original vs result, or two states).
 - Tamper localization (block perceptual-hash) pinpointing *where* an image was altered, an optional robust deep watermark (TrustMark) backend, tiered access with signed licence tokens (RBAC), a multi-temporal change timeline, Mirador (IIIF) embed + Europeana EDM export, and hologram / XR / web offline-experience export presets (incl. an AR `<model-viewer>` page).
+- Collection browsing: a full **/gallery** of processed sessions and **prev/next session** navigation (with `[`/`]` or `p`/`n` keys) inside the viewer, so you can flip through results without re-creating or re-processing.
 - Tiled multi-band blending that preserves multi-band quality at gigapixel scale instead of degrading to feather compositing.
 - Automatic output quality control (interior-hole, coverage, sharpness, seam, registration, and learned no-reference quality checks) with an `ok`/`warn`/`broken` verdict and a `quality_report.json` sidecar.
 - Automatic repair of enclosed holes via inpainting (optional LaMa deep backend, classical fallback).

@@ -447,6 +447,7 @@ async function initViewer() {
   });
 
   injectSmartControls();
+  injectSessionNav();
   bindViewerToolbar();
   await loadAnnotations();
   restoreDeepLink();
@@ -633,6 +634,64 @@ function injectSmartControls() {
     tools.appendChild(a);
   });
   host.appendChild(tools);
+}
+
+// Jump between already-processed sessions without going back to create one.
+async function injectSessionNav() {
+  let ids = [];
+  let idx = -1;
+  try {
+    const rows = await (await fetch("/api/sessions?status=ready&limit=500")).json();
+    ids = rows.map((r) => r.id);
+    idx = ids.indexOf(sessionId);
+  } catch (e) {
+    return;
+  }
+  const ko = currentLang() === "ko";
+  const prev = idx > 0 ? ids[idx - 1] : null;
+  const next = idx >= 0 && idx < ids.length - 1 ? ids[idx + 1] : null;
+  const go = (id) => { if (id) window.location.href = `/viewer/${id}`; };
+
+  const nav = document.createElement("div");
+  nav.className = "smart-annotate-panel";
+  nav.style.cssText =
+    "position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:30;display:flex;gap:4px;align-items:center;";
+  const mk = (label, id) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "hga-tool-btn";
+    b.textContent = label;
+    b.disabled = !id;
+    b.addEventListener("click", () => go(id));
+    return b;
+  };
+  const gallery = document.createElement("a");
+  gallery.className = "hga-tool-btn";
+  gallery.href = "/gallery";
+  gallery.textContent = ko ? "▦ 갤러리" : "▦ Gallery";
+  gallery.style.textDecoration = "none";
+  const counter = document.createElement("span");
+  counter.style.cssText = "font-family:var(--font-mono);font-size:.76rem;color:var(--muted);padding:0 6px";
+  counter.textContent = idx >= 0 ? `${idx + 1} / ${ids.length}` : "";
+
+  nav.appendChild(mk(ko ? "◀ 이전" : "◀ Prev", prev));
+  nav.appendChild(gallery);
+  nav.appendChild(counter);
+  nav.appendChild(mk(ko ? "다음 ▶" : "Next ▶", next));
+  const host = document.getElementById("openseadragon") || document.body;
+  host.appendChild(nav);
+
+  window.addEventListener("keydown", (e) => {
+    if (isFormField(e.target)) return;
+    if ((e.key === "n" || e.key === "]") && next) go(next);
+    else if ((e.key === "p" || e.key === "[") && prev) go(prev);
+  });
+}
+
+function isFormField(target) {
+  if (!target) return false;
+  const tag = (target.tagName || "").toLowerCase();
+  return tag === "input" || tag === "textarea" || tag === "select" || target.isContentEditable;
 }
 
 let measureMode = false;
