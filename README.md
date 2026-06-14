@@ -1,10 +1,12 @@
-﻿# Gigapixel Heritage Viewer
+﻿# Hyper Gigapixel Agent
+
+> 하이퍼 기가픽셀 에이전트 — 기가픽셀 문화유산 획득·정합·복원·3D·공유를 위한 에이전트형 인텔리전스 플랫폼 (구 *Gigapixel Heritage Viewer*).
 
 ## 과제 요약
 
-Gigapixel Heritage Viewer는 복합소재 문화유산의 고품질 디지털 획득, 정합, 검수, 공유를 지원하기 위한 연구용 로컬 웹 기반 플랫폼입니다. 본 프로젝트는 다중 고해상도 촬영 이미지를 원본 해상도 중심으로 스티칭하고, BigTIFF 원본 결과물과 웹 열람용 Deep Zoom 타일을 생성하여 연구자, 복원 전문가, 데이터 구축 담당자가 대형 문화유산 이미지 데이터를 검토하고 주석화할 수 있도록 설계되었습니다.
+Hyper Gigapixel Agent(하이퍼 기가픽셀 에이전트)는 복합소재 문화유산의 고품질 디지털 획득, 정합, 검수, 공유를 지원하기 위한 연구용 로컬 웹 기반 플랫폼입니다. 본 프로젝트는 다중 고해상도 촬영 이미지를 원본 해상도 중심으로 스티칭하고, BigTIFF 원본 결과물과 웹 열람용 Deep Zoom 타일을 생성하여 연구자, 복원 전문가, 데이터 구축 담당자가 대형 문화유산 이미지 데이터를 검토하고 주석화할 수 있도록 설계되었습니다.
 
-특히 30,000 x 30,000 픽셀 이상의 기가픽셀급 이미지와 20-50장 이상의 다중 입력 이미지셋을 다루는 문화유산 획득 환경을 주요 대상으로 하며, PTGui 수준의 전역 정합 품질에 가까워지기 위한 단계형 이미지 처리 파이프라인, 작업 큐 기반 처리 agent, 노드형 워크플로우 UI, 원본 BigTIFF 다운로드, 최적화 버전 다운로드, DZI 기반 웹 뷰어를 통합하는 것을 목표로 합니다.
+특히 30,000 x 30,000 픽셀 이상의 기가픽셀급 이미지와 최소2장, 기본20-50장 그 이상의 ㄱ다중 입력 이미지셋을 다루는 문화유산 획득 환경을 주요 대상으로 하며, PTGui 수준의 전역 정합 품질에 가까워지기 위한 단계형 이미지 처리 파이프라인, 작업 큐 기반 처리 agent, 노드형 워크플로우 UI, 원본 BigTIFF 다운로드, 최적화 버전 다운로드, DZI 기반 웹 뷰어를 통합하는 것을 목표로 합니다.
 
 Research-oriented local web application for high-resolution cultural heritage image stitching, BigTIFF export, Deep Zoom tiling, web-based inspection, annotation, and node-style workflow control.
 
@@ -24,7 +26,7 @@ This project is designed for digital heritage acquisition and restoration workfl
 - SAM-assisted smart annotation and crack/damage detection in the viewer (GrabCut fallback when SAM weights are absent).
 - Optional AI output enhancement (Real-ESRGAN super-resolution / denoise) as a non-archival viewing variant.
 - Archival-science layer: colour calibration with CIE dE2000 + FADGI/Metamorfoze grading, measured-vs-reconstructed provenance/uncertainty maps, dimensional scale calibration, focus stacking, multi-temporal change detection, photometric-stereo surface normals, a SHA-256 processing manifest, and IIIF output.
-- "AETHER" 3D/glass UI theme with an ambient animated background.
+- "HYPER·GIGA" 3D/glass UI theme with an ambient animated background.
 - Live **IIIF Image API 3.0** server (region/size/rotation/quality/format) — standard for global heritage institutions (Mirador / Universal Viewer).
 - **AI condition analysis** of cracks (Hessian ridge) and discolouration (CIELAB anomaly: yellowing / fading / staining).
 - **AI restoration** (de-colour, de-crack, de-noise) with a Before/After comparison slider.
@@ -159,10 +161,10 @@ Verification: test suite **24 passed**, including AI-feature fallback tests
 damage detection, enhancement scaling) in
 [`tests/test_ai_features.py`](tests/test_ai_features.py).
 
-## Update Notes — Archival Science Pack & AETHER UI
+## Update Notes — Archival Science Pack & HYPER·GIGA UI
 
 Turns the stitching engine into an archival-grade acquisition platform, and
-re-skins the app as a 3D/glass "AETHER" product. Each capability has a working
+re-skins the app as a 3D/glass "HYPER·GIGA" product. Each capability has a working
 classical implementation; deep/optional paths upgrade it when available.
 
 1. **Colour / radiometric calibration** ([`color.py`](app/services/color.py)).
@@ -198,7 +200,7 @@ classical implementation; deep/optional paths upgrade it when available.
    Per-pixel surface normals + albedo from a known-light-direction stack
    (`POST .../photometric`) — RTI-style relief for brushstrokes and tool marks.
 
-**AETHER UI** ([`static/theme.css`](app/static/theme.css)): a glassmorphic, neon,
+**HYPER·GIGA UI** ([`static/theme.css`](app/static/theme.css)): a glassmorphic, neon,
 depth-layered theme with an animated aurora background and a product brand mark,
 loaded over the existing markup (all element IDs preserved, JS untouched).
 

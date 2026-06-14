@@ -43,7 +43,7 @@ let lastPlan = null;
 
 const i18n = {
   en: {
-    pageTitle: "Gigapixel Heritage Viewer",
+    pageTitle: "Hyper Gigapixel Agent",
     expertMode: "Expert Mode",
     pageSubtitle: "Upload multiple images and run stitching, DZI generation, and viewer sharing in one flow.",
     sessionName: "Session Name",
@@ -106,7 +106,7 @@ const i18n = {
     englishOption: "English",
   },
   ko: {
-    pageTitle: "기가픽셀 헤리티지 뷰어",
+    pageTitle: "하이퍼 기가픽셀 에이전트",
     expertMode: "전문가 모드",
     pageSubtitle: "다중 이미지를 업로드하고 스티칭, DZI 생성, 웹 뷰어 공유까지 한 번에 실행합니다.",
     sessionName: "세션 이름",

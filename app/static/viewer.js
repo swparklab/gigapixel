@@ -42,8 +42,8 @@ let annotationCount = 0;
 
 const i18n = {
   en: {
-    pageTitle: "Session Viewer",
-    viewerTitle: "Session Viewer",
+    pageTitle: "Hyper Gigapixel Agent",
+    viewerTitle: "Hyper Gigapixel Agent",
     viewerSubtitle: "High-resolution image explorer with live annotations",
     viewerTip: "Mouse wheel zoom, drag to pan, click to pick point",
     sessionHeading: "Session",
@@ -88,8 +88,8 @@ const i18n = {
     unknownError: "Unknown error",
   },
   ko: {
-    pageTitle: "세션 뷰어",
-    viewerTitle: "세션 뷰어",
+    pageTitle: "하이퍼 기가픽셀 에이전트",
+    viewerTitle: "하이퍼 기가픽셀 에이전트",
     viewerSubtitle: "고해상도 이미지 열람과 실시간 주석 관리",
     viewerTip: "휠 확대/축소, 드래그 이동, 클릭 좌표 선택",
     sessionHeading: "세션",

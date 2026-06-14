@@ -98,8 +98,8 @@ const el = {
 
 const i18n = {
   en: {
-    pageTitle: "Gigapixel Node Workflow",
-    brandTitle: "Gigapixel Node Studio",
+    pageTitle: "Hyper Gigapixel Agent · Node Studio",
+    brandTitle: "Hyper Gigapixel Agent · Node Studio",
     brandSubtitle: "Agent Workflow Console",
     roleLabel: "Role",
     roleObserver: "Observer",
@@ -189,8 +189,8 @@ const i18n = {
     cat_math: "math",
   },
   ko: {
-    pageTitle: "기가픽셀 노드 워크플로우",
-    brandTitle: "기가픽셀 노드 스튜디오",
+    pageTitle: "하이퍼 기가픽셀 에이전트 · 노드 스튜디오",
+    brandTitle: "하이퍼 기가픽셀 에이전트 · 노드 스튜디오",
     brandSubtitle: "에이전트 워크플로우 콘솔",
     roleLabel: "역할",
     roleObserver: "관찰자",

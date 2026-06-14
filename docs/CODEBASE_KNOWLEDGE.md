@@ -4,7 +4,7 @@ Last reviewed: 2026-06-06
 
 ## Project Purpose
 
-Gigapixel Heritage Viewer is a local FastAPI web application for heritage image workflows:
+Hyper Gigapixel Agent (formerly Gigapixel Heritage Viewer) is a local FastAPI web application for heritage image workflows:
 
 - Upload multiple source images.
 - Stitch source images into one high-resolution mosaic.
@@ -365,7 +365,7 @@ Important settings:
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `app_name` | `Gigapixel Heritage Viewer` | FastAPI app title |
+| `app_name` | `Hyper Gigapixel Agent` | FastAPI app title |
 | `api_prefix` | `/api` | API route prefix |
 | `data_root` | `PROJECT_ROOT / data` | Runtime storage root |
 | `database_path` | `data/gigapixel.db` | SQLite database path |

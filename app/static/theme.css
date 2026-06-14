@@ -1,7 +1,8 @@
 /* =====================================================================
-   AETHER — Heritage Intelligence  ·  3D / neon design system
+   Hyper Gigapixel Agent — HYPER·GIGA  ·  3D / neon design system
    Loaded after the base stylesheet. Re-skins the whole app by overriding
    design tokens and layering glass, depth, glow and an ambient background.
+   (Internal class names keep the `aether-` prefix for stability.)
    ===================================================================== */
 
 :root,

@@ -7,7 +7,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class Settings(BaseSettings):
-    app_name: str = "Gigapixel Heritage Viewer"
+    app_name: str = "Hyper Gigapixel Agent"
     api_prefix: str = "/api"
     data_root: Path = PROJECT_ROOT / "data"
     database_path: Path = PROJECT_ROOT / "data" / "gigapixel.db"
