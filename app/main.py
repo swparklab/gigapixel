@@ -1,5 +1,8 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
+import logging
 import shutil
+import threading
 import uuid
 
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
@@ -70,8 +73,51 @@ from .services.jobs import JobService
 from .services.storage import node_upload_dir, node_upload_path, output_dir, upload_dir
 
 configure_logging(settings.log_level, settings.log_format)
+logger = logging.getLogger(__name__)
 
-app = FastAPI(title=settings.app_name)
+# --- Embedded processing agent -------------------------------------------------
+# Run the queue worker inside the API process so one launch starts everything.
+_agent_stop = threading.Event()
+_agent_thread: threading.Thread | None = None
+
+
+def _embedded_agent_loop() -> None:
+    from .agent import run_once
+
+    poll = max(0.2, float(settings.agent_poll_interval_seconds))
+    logger.info("embedded agent worker started", extra={"poll_interval_seconds": poll})
+    while not _agent_stop.is_set():
+        try:
+            processed = run_once()
+        except Exception:
+            logger.exception("embedded agent iteration failed")
+            processed = False
+        if not processed:
+            _agent_stop.wait(poll)
+    logger.info("embedded agent worker stopped")
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    global _agent_thread
+    if settings.embedded_agent:
+        _agent_stop.clear()
+        _agent_thread = threading.Thread(
+            target=_embedded_agent_loop, name="embedded-agent", daemon=True
+        )
+        _agent_thread.start()
+    else:
+        logger.info("embedded agent disabled; run `python -m app.agent` separately")
+    try:
+        yield
+    finally:
+        _agent_stop.set()
+        if _agent_thread is not None:
+            _agent_thread.join(timeout=5)
+            _agent_thread = None
+
+
+app = FastAPI(title=settings.app_name, lifespan=_lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allow_origins,
@@ -87,12 +133,24 @@ ensure_schema()
 async def _api_key_guard(request: Request, call_next):
     """Optional API-key auth: enforced only when settings.api_key is set."""
     key = str(settings.api_key or "")
-    if key and request.url.path.startswith(settings.api_prefix):
+    health_path = f"{settings.api_prefix}/health"
+    if key and request.url.path.startswith(settings.api_prefix) and request.url.path != health_path:
         if request.headers.get("X-API-Key") != key:
             from fastapi.responses import JSONResponse
 
             return JSONResponse(status_code=401, content={"detail": "Invalid or missing X-API-Key"})
     return await call_next(request)
+
+
+@app.get(f"{settings.api_prefix}/health")
+def health():
+    """Liveness probe: confirms the API is up and whether the embedded worker runs."""
+    worker_alive = bool(_agent_thread is not None and _agent_thread.is_alive())
+    return {
+        "status": "ok",
+        "embedded_agent": settings.embedded_agent,
+        "worker_alive": worker_alive,
+    }
 
 
 static_dir = Path(__file__).resolve().parent / "static"
@@ -207,22 +265,22 @@ def _serialize_annotation(row) -> "AnnotationRead":
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     # Default landing mode is classic UI.
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html")
 
 
 @app.get("/classic", response_class=HTMLResponse)
 def classic(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html")
 
 
 @app.get("/viewer/{session_id}", response_class=HTMLResponse)
 def viewer(request: Request, session_id: str):
-    return templates.TemplateResponse("viewer.html", {"request": request, "session_id": session_id})
+    return templates.TemplateResponse(request, "viewer.html", {"session_id": session_id})
 
 
 @app.get("/workflow", response_class=HTMLResponse)
 def workflow_page(request: Request):
-    return templates.TemplateResponse("workflow.html", {"request": request})
+    return templates.TemplateResponse(request, "workflow.html")
 
 
 @app.post(f"{settings.api_prefix}/acquisition/plan", response_model=AcquisitionPlanRead)
@@ -422,12 +480,12 @@ def report_page(session_id: str, request: Request, db: Session = Depends(get_db)
 
 @app.get("/relief/{session_id}", response_class=HTMLResponse)
 def relief_page(session_id: str, request: Request):
-    return templates.TemplateResponse("relief.html", {"request": request, "session_id": session_id})
+    return templates.TemplateResponse(request, "relief.html", {"session_id": session_id})
 
 
 @app.get("/sync", response_class=HTMLResponse)
 def sync_compare_page(request: Request, a: str = "", b: str = ""):
-    return templates.TemplateResponse("sync.html", {"request": request, "a": a, "b": b})
+    return templates.TemplateResponse(request, "sync.html", {"a": a, "b": b})
 
 
 def _ensure_pid(session: SessionModel, db: Session) -> str:
@@ -677,17 +735,17 @@ def change_timeline(session_id: str, payload: TimelineRequest, db: Session = Dep
 
 @app.get("/timeline/{session_id}", response_class=HTMLResponse)
 def timeline_page(session_id: str, request: Request):
-    return templates.TemplateResponse("timeline.html", {"request": request, "session_id": session_id})
+    return templates.TemplateResponse(request, "timeline.html", {"session_id": session_id})
 
 
 @app.get("/mirador/{session_id}", response_class=HTMLResponse)
 def mirador_page(session_id: str, request: Request):
-    return templates.TemplateResponse("mirador.html", {"request": request, "session_id": session_id})
+    return templates.TemplateResponse(request, "mirador.html", {"session_id": session_id})
 
 
 @app.get("/ar/{session_id}", response_class=HTMLResponse)
 def ar_page(session_id: str, request: Request):
-    return templates.TemplateResponse("ar.html", {"request": request, "session_id": session_id})
+    return templates.TemplateResponse(request, "ar.html", {"session_id": session_id})
 
 
 @app.get(f"{settings.api_prefix}/sessions/{{session_id}}/edm.xml")
@@ -1367,12 +1425,12 @@ def get_3d_asset(session_id: str, filename: str, db: Session = Depends(get_db)):
 
 @app.get("/viewer3d/{session_id}", response_class=HTMLResponse)
 def viewer3d_page(session_id: str, request: Request):
-    return templates.TemplateResponse("viewer3d.html", {"request": request, "session_id": session_id})
+    return templates.TemplateResponse(request, "viewer3d.html", {"session_id": session_id})
 
 
 @app.get("/compare/{session_id}", response_class=HTMLResponse)
 def compare_page(session_id: str, request: Request):
-    return templates.TemplateResponse("compare.html", {"request": request, "session_id": session_id})
+    return templates.TemplateResponse(request, "compare.html", {"session_id": session_id})
 
 
 @app.post(f"{settings.api_prefix}/sessions/{{session_id}}/reconstruct3d", response_model=ReconResponse)

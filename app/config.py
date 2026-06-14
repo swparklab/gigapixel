@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     tile_overlap: int = 1
     optimized_jpeg_quality: int = 85
     agent_poll_interval_seconds: float = 1.0
+    # Run the processing agent worker inside the API server process so a single
+    # `uvicorn app.main:app` launch starts both the API and the queue worker.
+    # Set to false to run a dedicated worker (`python -m app.agent`) instead.
+    embedded_agent: bool = True
     log_level: str = "INFO"
     log_format: str = "json"
     raw_stitched_format: str = "bigtiff"
