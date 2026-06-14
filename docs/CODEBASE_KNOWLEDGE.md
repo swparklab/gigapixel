@@ -256,6 +256,11 @@ Important distinction: classic processing uses a queued polling agent. Node work
 | `GET` | `/api/sessions/{session_id}/pid` | ARK persistent identifier |
 | `GET` | `/api/sessions/{session_id}/metadata.xml` | LIDO / Dublin Core XML export |
 | `GET` | `/sync` | Synchronized two-session comparison viewer |
+| `POST` | `/api/license/issue` · `GET /api/license/verify` | Signed licence tokens (RBAC) |
+| `POST` | `/api/sessions/{session_id}/timeline` | Multi-temporal change timeline |
+| `GET` | `/mirador/{session_id}` · `/api/sessions/{id}/edm.xml` | Mirador embed + Europeana EDM |
+| `POST` | `/api/sessions/{session_id}/export-preset` | hologram / xr / web export packages |
+| `GET` | `/ar/{session_id}` | AR (model-viewer) page |
 | `GET` | `/api/sessions/{session_id}/tiles/{tile_path}` | Serve DZI tile |
 | `GET` | `/api/sessions/{session_id}/annotations` | List annotations |
 | `POST` | `/api/sessions/{session_id}/annotations` | Create annotation |

@@ -24,8 +24,12 @@ from .schemas import (
     ConditionResponse,
     CoverageResponse,
     DamageResponse,
+    ExportPresetRequest,
     FocusStackResponse,
+    LicenseRequest,
+    LicenseResponse,
     MetadataUpdate,
+    TimelineRequest,
     OutpaintRequest,
     OutpaintResponse,
     ScaleSetRequest,
@@ -507,7 +511,7 @@ def watermark_endpoint(session_id: str, payload: WatermarkRequest, db: Session =
 
     import cv2
 
-    from .services.watermark import embed_watermark, perceptual_hash
+    from .services.watermark import block_hashes, embed_robust, perceptual_hash
 
     session = db.get(SessionModel, session_id)
     if not session:
@@ -518,7 +522,7 @@ def watermark_endpoint(session_id: str, payload: WatermarkRequest, db: Session =
     pid = _ensure_pid(session, db)
     bgr = _read_raw_bgr(session, max_dim=4096)
     wm_payload = f"{pid}|{payload.recipient}|{payload.identifier or ''}"
-    watermarked = embed_watermark(bgr, wm_payload)
+    watermarked, backend = embed_robust(bgr, wm_payload)
     base = output_dir(session_id)
     out = base / "stitched_watermarked.jpg"
     cv2.imencode(".jpg", watermarked, [cv2.IMWRITE_JPEG_QUALITY, 95])[1].tofile(str(out))
@@ -532,7 +536,9 @@ def watermark_endpoint(session_id: str, payload: WatermarkRequest, db: Session =
         registry = []
     registry.append({
         "payload": wm_payload, "recipient": payload.recipient, "identifier": payload.identifier,
-        "token": token, "phash": phash, "sha256": hashlib.sha256(out.read_bytes()).hexdigest(),
+        "token": token, "phash": phash, "backend": backend,
+        "block_hashes": block_hashes(watermarked),
+        "sha256": hashlib.sha256(out.read_bytes()).hexdigest(),
         "issued_utc": _dt.datetime.now(_dt.UTC).isoformat(),
     })
     rights_path.write_text(_json.dumps(registry, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -556,7 +562,7 @@ async def verify_watermark(session_id: str, file: UploadFile = File(...), db: Se
     import cv2
     import numpy as np
 
-    from .services.watermark import hamming_distance, perceptual_hash, verify_payload
+    from .services.watermark import hamming_distance, localize_tamper, perceptual_hash, verify_payload
 
     session = db.get(SessionModel, session_id)
     if not session:
@@ -574,22 +580,178 @@ async def verify_watermark(session_id: str, file: UploadFile = File(...), db: Se
         except Exception:
             registry = []
 
-    best = {"match_fraction": 0.0, "recipient": None, "payload": None, "phash": None}
+    best = {"match_fraction": 0.0, "recipient": None, "payload": None, "phash": None,
+            "block_hashes": None, "backend": None}
     for rec in registry:
         res = verify_payload(bgr, rec["payload"])
         if res["match_fraction"] > best["match_fraction"]:
             best = {"match_fraction": res["match_fraction"], "recipient": rec.get("recipient"),
-                    "payload": rec.get("payload"), "phash": rec.get("phash")}
+                    "payload": rec.get("payload"), "phash": rec.get("phash"),
+                    "block_hashes": rec.get("block_hashes"), "backend": rec.get("backend")}
 
     found = best["match_fraction"] >= 0.85
     phash_dist = hamming_distance(best["phash"], perceptual_hash(bgr)) if best["phash"] else 64
-    # Watermark present but perceptual hash diverged => the content was modified.
-    tampered = bool(found and phash_dist > 8)
+    tampered_fraction = 0.0
+    mask_url = None
+    if best["block_hashes"]:
+        resized = bgr
+        # block_hashes were computed on a (possibly downscaled) issued image; the
+        # grid is scale-invariant, so compare directly.
+        mask, tampered_fraction = localize_tamper(resized, best["block_hashes"])
+        if tampered_fraction > 0:
+            cv2.imencode(".png", mask)[1].tofile(str(output_dir(session_id) / "tamper_mask.png"))
+            mask_url = f"{settings.api_prefix}/sessions/{session_id}/3d/tamper_mask.png"
+    tampered = bool(found and (phash_dist > 8 or tampered_fraction > 0.01))
     return VerifyResponse(
         watermark_found=found, recipient=best["recipient"] if found else None,
         payload=best["payload"] if found else None, match_fraction=round(best["match_fraction"], 4),
-        tampered=tampered, phash_distance=phash_dist,
+        tampered=tampered, phash_distance=phash_dist, tampered_fraction=tampered_fraction,
+        tamper_mask_url=mask_url, backend=best["backend"],
     )
+
+
+@app.post(f"{settings.api_prefix}/license/issue", response_model=LicenseResponse)
+def issue_license(payload: LicenseRequest):
+    from .services.licensing import issue_token
+
+    data = issue_token(payload.recipient, payload.tier, payload.days)
+    return LicenseResponse(token=data["token"], recipient=data["recipient"], tier=data["tier"],
+                           exp=data["exp"], signed=data["signed"])
+
+
+@app.get(f"{settings.api_prefix}/license/verify")
+def verify_license(token: str):
+    from .services.licensing import tier_allows, verify_token
+
+    result = verify_token(token)
+    if result.get("valid"):
+        result["allows"] = sorted(v for v in ("raw", "optimized", "watermarked", "enhanced", "upscaled", "archive")
+                                  if tier_allows(result.get("tier", "viewer"), v))
+    return result
+
+
+def _read_session_raw(session: SessionModel, max_dim: int = 3000):
+    import cv2
+    import numpy as np
+    from PIL import Image
+
+    Image.MAX_IMAGE_PIXELS = None
+    with Image.open(resolve_raw_image_path(session)) as src:
+        img = src.convert("RGB")
+        scale = min(1.0, max_dim / float(max(img.size)))
+        if scale < 1.0:
+            img = img.resize((int(img.size[0] * scale), int(img.size[1] * scale)), Image.LANCZOS)
+        return cv2.cvtColor(np.asarray(img), cv2.COLOR_RGB2BGR)
+
+
+@app.post(f"{settings.api_prefix}/sessions/{{session_id}}/timeline")
+def change_timeline(session_id: str, payload: TimelineRequest, db: Session = Depends(get_db)):
+    """Multi-temporal state tracking: pairwise change across dated captures."""
+    from .services.change_detection import detect_changes
+
+    session = db.get(SessionModel, session_id)
+    if not session or session.status != "ready":
+        raise HTTPException(status_code=404, detail="Session not ready")
+    ids = [session_id] + [i for i in payload.others if i != session_id]
+    sessions = []
+    for sid in ids:
+        s = db.get(SessionModel, sid)
+        if s and s.status == "ready":
+            sessions.append(s)
+    if len(sessions) < 2:
+        raise HTTPException(status_code=400, detail="Need at least two ready sessions")
+    sessions.sort(key=lambda s: s.created_at)
+
+    images = {s.id: _read_session_raw(s) for s in sessions}
+    steps = []
+    for a, b in zip(sessions, sessions[1:]):
+        result, _mask = detect_changes(images[a.id], images[b.id], sensitivity=payload.sensitivity)
+        steps.append({
+            "from": {"id": a.id, "name": a.name, "date": a.created_at.isoformat()},
+            "to": {"id": b.id, "name": b.name, "date": b.created_at.isoformat()},
+            "aligned": result.aligned, "change_fraction": result.change_fraction,
+            "regions": result.regions[:50],
+        })
+    return {"object": session.name, "states": len(sessions), "steps": steps}
+
+
+@app.get("/timeline/{session_id}", response_class=HTMLResponse)
+def timeline_page(session_id: str, request: Request):
+    return templates.TemplateResponse("timeline.html", {"request": request, "session_id": session_id})
+
+
+@app.get("/mirador/{session_id}", response_class=HTMLResponse)
+def mirador_page(session_id: str, request: Request):
+    return templates.TemplateResponse("mirador.html", {"request": request, "session_id": session_id})
+
+
+@app.get("/ar/{session_id}", response_class=HTMLResponse)
+def ar_page(session_id: str, request: Request):
+    return templates.TemplateResponse("ar.html", {"request": request, "session_id": session_id})
+
+
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/edm.xml")
+def get_edm_xml(session_id: str, request: Request, db: Session = Depends(get_db)):
+    """Europeana Data Model (EDM) record for aggregation into national portals."""
+    import json as _json
+    from fastapi import Response
+    from xml.sax.saxutils import escape
+
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    try:
+        meta = _json.loads(session.metadata_json) if session.metadata_json else {}
+    except Exception:
+        meta = {}
+    pid = _ensure_pid(session, db)
+    base = str(request.base_url).rstrip("/")
+    view = f"{base}/viewer/{session_id}"
+    iiif = f"{base}{settings.api_prefix}/sessions/{session_id}/iiif/manifest"
+
+    def e(v):
+        return escape("" if v is None else str(v))
+
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" '
+        'xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" '
+        'xmlns:edm="http://www.europeana.eu/schemas/edm/" xmlns:ore="http://www.openarchives.org/ore/terms/">\n'
+        f'  <edm:ProvidedCHO rdf:about="{e(pid)}">\n'
+        f"    <dc:title>{e(meta.get('title') or session.name)}</dc:title>\n"
+        f"    <dc:creator>{e(meta.get('creator'))}</dc:creator>\n"
+        f"    <dc:type>{e(meta.get('material'))}</dc:type>\n"
+        f"    <dcterms:provenance>{e(meta.get('repository'))}</dcterms:provenance>\n"
+        f"    <dc:rights>{e(meta.get('rights'))}</dc:rights>\n"
+        f"    <edm:type>IMAGE</edm:type>\n"
+        "  </edm:ProvidedCHO>\n"
+        f'  <ore:Aggregation rdf:about="{e(pid)}#aggregation">\n'
+        f'    <edm:aggregatedCHO rdf:resource="{e(pid)}"/>\n'
+        f'    <edm:isShownAt rdf:resource="{e(view)}"/>\n'
+        f'    <edm:isShownBy rdf:resource="{e(iiif)}"/>\n'
+        f"    <edm:provider>Hyper Gigapixel Agent</edm:provider>\n"
+        "  </ore:Aggregation>\n"
+        "</rdf:RDF>\n"
+    )
+    return Response(content=xml, media_type="application/rdf+xml")
+
+
+@app.post(f"{settings.api_prefix}/sessions/{{session_id}}/export-preset")
+def export_preset_endpoint(session_id: str, payload: ExportPresetRequest, db: Session = Depends(get_db)):
+    from fastapi import Response
+
+    from .services.export_presets import build_preset
+
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.status != "ready":
+        raise HTTPException(status_code=409, detail="Session is not ready yet")
+    bgr = _read_raw_bgr(session, max_dim=2400)
+    data, _files = build_preset(bgr, output_dir(session_id), payload.preset)
+    name = build_download_filename(session, variant=f"preset-{payload.preset}", file_path=Path("x.zip"))
+    return Response(content=data, media_type="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
 @app.post(f"{settings.api_prefix}/sessions/{{session_id}}/images")

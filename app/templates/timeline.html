@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hyper Gigapixel Agent · Change Timeline</title>
+  <link rel="stylesheet" href="/static/theme.css" />
+  <style>
+    body { min-height: 100vh; }
+    .wrap { max-width: 900px; margin: 0 auto; padding: 22px 18px 60px; }
+    .bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 18px; }
+    .bar input { width: auto; min-height: 0; padding: 7px 10px; }
+    .bar button { width: auto; min-height: 0; padding: 8px 14px; border-radius: var(--radius-md); border: 1px solid var(--accent); background: var(--accent); color: var(--color-on-primary); font-weight: 600; cursor: pointer; }
+    .step { border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: var(--radius-md); padding: 12px 16px; margin: 12px 0; background: var(--color-surface); }
+    .step h3 { margin: 0 0 6px; font-size: 1rem; }
+    .meta { font-family: var(--font-mono); font-size: .78rem; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
+    .bardelta { height: 8px; border-radius: 999px; background: var(--color-surface-subtle); overflow: hidden; margin: 8px 0; }
+    .bardelta span { display: block; height: 100%; background: var(--color-warning); }
+    a.cmp { font-family: var(--font-mono); font-size: .76rem; }
+    #status { color: var(--muted); font-family: var(--font-mono); font-size: .82rem; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="bar">
+      <span class="hga-brand"><svg class="hga-logo" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:26px;height:26px">
+        <rect x="3" y="3" width="18" height="18" rx="4.5" stroke="currentColor" stroke-width="1.4"/>
+        <path d="M12 5.2v3.1M12 15.7v3.1M5.2 12h3.1M15.7 12h3.1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        <circle cx="12" cy="12" r="3.1" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="12" r="0.95" fill="currentColor"/>
+      </svg> <span class="hga-sub">Change Timeline</span></span>
+      <input id="others" placeholder="other session ids (comma-separated, same object over time)" style="flex:1;min-width:280px">
+      <button id="runBtn">Build timeline</button>
+    </div>
+    <p id="status">Enter the other dated captures of this object to track its condition over time.</p>
+    <div id="steps"></div>
+  </main>
+  <script>
+    const sessionId = "{{ session_id }}";
+    const stepsEl = document.getElementById("steps");
+    const statusEl = document.getElementById("status");
+    document.getElementById("runBtn").addEventListener("click", async () => {
+      const others = document.getElementById("others").value.split(",").map(s => s.trim()).filter(Boolean);
+      if (!others.length) { statusEl.textContent = "Add at least one other session id."; return; }
+      statusEl.textContent = "Aligning captures and detecting change…";
+      try {
+        const res = await fetch(`/api/sessions/${sessionId}/timeline`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ others }),
+        });
+        const data = await res.json();
+        statusEl.textContent = `${data.object}: ${data.states} states, ${data.steps.length} transitions.`;
+        stepsEl.innerHTML = "";
+        data.steps.forEach((s, i) => {
+          const div = document.createElement("div"); div.className = "step";
+          const pct = Math.min(100, (s.change_fraction * 100 * 6)).toFixed(0);
+          div.innerHTML = `<h3>${i + 1}. ${s.from.name} → ${s.to.name}</h3>
+            <div class="meta"><span>${s.from.date.slice(0,10)} → ${s.to.date.slice(0,10)}</span>
+            <span>${s.aligned ? "aligned" : "alignment failed"}</span>
+            <span>change ${(s.change_fraction*100).toFixed(2)}%</span>
+            <span>${s.regions.length} regions</span></div>
+            <div class="bardelta"><span style="width:${pct}%"></span></div>
+            <a class="cmp" href="/sync?a=${s.from.id}&b=${s.to.id}" target="_blank">↔ compare side by side</a>`;
+          stepsEl.appendChild(div);
+        });
+      } catch (e) { statusEl.textContent = "Timeline failed (all sessions must be ready)."; }
+    });
+  </script>
+</body>
+</html>

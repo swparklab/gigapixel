@@ -290,6 +290,32 @@ class VerifyResponse(BaseModel):
     match_fraction: float
     tampered: bool
     phash_distance: int
+    tampered_fraction: float = 0.0
+    tamper_mask_url: str | None = None
+    backend: str | None = None
+
+
+class LicenseRequest(BaseModel):
+    recipient: str = Field(min_length=1, max_length=200)
+    tier: str = Field(default="viewer", max_length=40)
+    days: int = Field(default=365, ge=1, le=36500)
+
+
+class LicenseResponse(BaseModel):
+    token: str
+    recipient: str
+    tier: str
+    exp: int
+    signed: bool
+
+
+class TimelineRequest(BaseModel):
+    others: list[str] = Field(min_length=1)
+    sensitivity: float = Field(default=0.12, ge=0.02, le=0.9)
+
+
+class ExportPresetRequest(BaseModel):
+    preset: str = Field(default="web", pattern="^(hologram|xr|web)$")
 
 
 class ProcessRequest(BaseModel):

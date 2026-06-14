@@ -621,8 +621,12 @@ function injectSmartControls() {
     [ko0 ? "📄 보고서" : "📄 Report", `/report/${sessionId}`],
     [ko0 ? "💡 레이킹광" : "💡 Raking", `/relief/${sessionId}`],
     [ko0 ? "↔ 비교" : "↔ Compare", `/sync?a=${sessionId}`],
+    [ko0 ? "🕰 타임라인" : "🕰 Timeline", `/timeline/${sessionId}`],
+    [ko0 ? "🏛 Mirador" : "🏛 Mirador", `/mirador/${sessionId}`],
+    [ko0 ? "🥽 AR/XR" : "🥽 AR/XR", `/ar/${sessionId}`],
     [ko0 ? "🆔 LIDO" : "🆔 LIDO", `/api/sessions/${sessionId}/metadata.xml?format=lido`],
-    [ko0 ? "📦 아카이브(BagIt)" : "📦 Archive (BagIt)", `/api/sessions/${sessionId}/archive`],
+    ["EDM", `/api/sessions/${sessionId}/edm.xml`],
+    [ko0 ? "📦 아카이브" : "📦 Archive", `/api/sessions/${sessionId}/archive`],
   ].forEach(([label, href]) => {
     const a = document.createElement("a");
     a.href = href; a.target = "_blank"; a.rel = "noopener"; a.textContent = label; a.className = "aether-report-link";

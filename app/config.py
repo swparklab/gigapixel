@@ -254,6 +254,19 @@ class Settings(BaseSettings):
     pid_naan: str = "99999"
     # Encrypted archive key derivation rounds (PBKDF2-HMAC-SHA256).
     archive_encrypt_iterations: int = 200_000
+    # Robust watermark backend: auto | trustmark | classical.
+    watermark_backend: str = "auto"
+    # Block-pHash tamper-localisation grid (NxN blocks).
+    watermark_tamper_grid: int = 16
+
+    # --- Licensing / access control -----------------------------------------
+    # HMAC secret for signed licence tokens (empty = dev mode, unsigned).
+    license_secret: str = ""
+    # Access tiers, most→least privileged. Token tier gates download variants.
+    license_tiers: list[str] = Field(default_factory=lambda: ["owner", "researcher", "viewer"])
+
+    # --- Offline experience export (hologram / XR) --------------------------
+    hologram_layers: int = 6          # depth slices for hologram printing presets
 
     # --- Job queue robustness ------------------------------------------------
     job_lease_seconds: int = 600          # a claimed job is "stale" past this

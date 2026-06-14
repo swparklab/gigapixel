@@ -25,6 +25,7 @@ This project is designed for digital heritage acquisition and restoration workfl
 - Curator/scholar workbench: descriptive (Dublin Core) metadata, on-image measurement in mm (scale calibration), region annotations with tags exported as IIIF AnnotationPages, citable IIIF region deep-links, a printable condition report, a raking-light (RTI-style) relief viewer, a sessions dashboard, and BagIt archival export.
 - Rights protection & authentication (KOCCA pillar): an invisible DCT watermark embedding a per-recipient identifier, perceptual-hash tamper detection / leak tracing, AES-256-GCM encrypted packaging, ARK persistent identifiers, and LIDO / Dublin Core XML export.
 - Material reproduction: roughness and gloss/specular maps from surface relief, and a synchronized side-by-side comparison viewer (original vs result, or two states).
+- Tamper localization (block perceptual-hash) pinpointing *where* an image was altered, an optional robust deep watermark (TrustMark) backend, tiered access with signed licence tokens (RBAC), a multi-temporal change timeline, Mirador (IIIF) embed + Europeana EDM export, and hologram / XR / web offline-experience export presets (incl. an AR `<model-viewer>` page).
 - Tiled multi-band blending that preserves multi-band quality at gigapixel scale instead of degrading to feather compositing.
 - Automatic output quality control (interior-hole, coverage, sharpness, seam, registration, and learned no-reference quality checks) with an `ok`/`warn`/`broken` verdict and a `quality_report.json` sidecar.
 - Automatic repair of enclosed holes via inpainting (optional LaMa deep backend, classical fallback).
@@ -440,6 +441,34 @@ Verification: **61 tests pass**, including watermark embed/extract through JPEG,
 perceptual-hash tamper detection, AES encrypt/decrypt round-trip, material maps,
 and PID + LIDO/DC XML APIs ([`tests/test_rights.py`](tests/test_rights.py)).
 
+## Update Notes — Authentication, Access Control & Offline Experience
+
+Extends the rights pillar and adds the project's offline-experience axis.
+
+1. **Tamper localization** ([`watermark.py`](app/services/watermark.py)).
+   Beyond present/absent detection, block perceptual-hashes pinpoint *where* an
+   image was altered — `POST .../verify-watermark` now returns a tampered
+   fraction and a tamper-mask. An optional **TrustMark** deep backend
+   (`WATERMARK_BACKEND`) upgrades robustness when installed.
+2. **Tiered access + signed licence tokens** ([`licensing.py`](app/services/licensing.py),
+   `POST /api/license/issue`, `GET /api/license/verify`). HMAC-SHA256 expiring
+   tokens carry a recipient + access **tier**; tiers gate which download variants
+   are permitted (단계별 활용 권한 / 인증 사용자별 관리).
+3. **Multi-temporal change timeline** (`POST .../timeline`, page `/timeline/{id}`).
+   Registers an object's dated captures and reports change per transition, each
+   linkable to the synchronized comparison viewer — conservation monitoring over
+   time (원형/상태 대비 비교).
+4. **Standards interoperability** — a **Mirador 3** IIIF embed (`/mirador/{id}`)
+   and a **Europeana EDM** record (`.../edm.xml`) for national-portal aggregation.
+5. **Offline-experience export presets** ([`export_presets.py`](app/services/export_presets.py),
+   `POST .../export-preset`) — `hologram` (depth-sliced colour layers + depth/
+   normal maps for **hologram printing**), `xr` (textured GLB + an **AR**
+   `<model-viewer>` page `/ar/{id}`), and `web` (optimised + DZI + IIIF).
+
+Verification: **64 tests pass**, including licence issue/verify + RBAC gating,
+tamper-region localization, and preset packaging
+([`tests/test_rights.py`](tests/test_rights.py)).
+
 ## Project Status
 
 This repository is an active research and engineering prototype.
@@ -646,6 +675,11 @@ The agent emits structured JSON logs. Example:
 | LIDO / DC XML | `GET /api/sessions/{session_id}/metadata.xml?format=lido\|dc` |
 | Material maps | `POST /api/sessions/{session_id}/to3d` (`representation=material`) |
 | Synchronized compare | `/sync?a={id}&b={id}` |
+| Licence (RBAC) | `POST /api/license/issue` · `GET /api/license/verify?token=` |
+| Change timeline | `POST /api/sessions/{session_id}/timeline` · page `/timeline/{id}` |
+| Mirador (IIIF) | `/mirador/{session_id}` |
+| Europeana EDM | `GET /api/sessions/{session_id}/edm.xml` |
+| Export presets | `POST /api/sessions/{session_id}/export-preset` (`hologram`/`xr`/`web`) · AR `/ar/{id}` |
 
 ## Typical Workflow
 

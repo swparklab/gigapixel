@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hyper Gigapixel Agent · Mirador (IIIF)</title>
+  <style>
+    html, body { margin: 0; height: 100%; }
+    #mirador { position: fixed; inset: 0; }
+    .hint { position: fixed; bottom: 10px; left: 12px; z-index: 9; font: 12px system-ui, sans-serif;
+      color: #cfd6e6; background: rgba(10,15,29,.6); padding: 6px 10px; border-radius: 8px; }
+    .hint a { color: #57c7ff; }
+  </style>
+  <script src="https://unpkg.com/mirador@3.3.0/dist/mirador.min.js"></script>
+</head>
+<body>
+  <div id="mirador"></div>
+  <div class="hint">IIIF · Mirador 3 · <a href="/viewer/{{ session_id }}">← native viewer</a></div>
+  <script>
+    const sessionId = "{{ session_id }}";
+    const manifest = `${window.location.origin}/api/sessions/${sessionId}/iiif/manifest`;
+    Mirador.viewer({
+      id: "mirador",
+      window: { allowFullscreen: true, sideBarOpen: true },
+      windows: [{ manifestId: manifest, view: "single" }],
+    });
+  </script>
+</body>
+</html>

@@ -61,6 +61,44 @@ def test_material_maps_from_image():
     assert Path(result["artifacts"]["roughness"]).exists()
 
 
+def test_license_token_issue_verify_and_rbac():
+    from app.services.licensing import issue_token, tier_allows, verify_token
+
+    issued = issue_token("museum-A", "researcher", days=30)
+    assert verify_token(issued["token"])["valid"] is True
+    assert verify_token(issued["token"][:-2] + "xx")["reason"] == "bad_signature"
+    # tier gating
+    assert tier_allows("owner", "raw") and not tier_allows("viewer", "raw")
+    assert tier_allows("researcher", "watermarked") and not tier_allows("researcher", "raw")
+
+
+def test_tamper_localization_pinpoints_region():
+    from app.services.watermark import block_hashes, localize_tamper
+
+    img = _scene(256, 256)
+    reference = block_hashes(img)
+    tampered = img.copy()
+    cv2.rectangle(tampered, (30, 30), (110, 110), (0, 0, 0), -1)
+    mask, fraction = localize_tamper(tampered, reference)
+    assert fraction > 0.0
+    assert int(mask[70, 70]) == 255            # tampered area flagged
+    assert int(mask[220, 220]) == 0            # untouched area clean
+
+
+def test_export_preset_zip_contents():
+    import io
+    import tempfile
+    import zipfile
+
+    from app.services.export_presets import build_preset
+
+    tmp = Path(tempfile.mkdtemp())
+    data, files = build_preset(_scene(200, 260), tmp, "hologram")
+    names = zipfile.ZipFile(io.BytesIO(data)).namelist()
+    assert "preset.json" in names and any(n.startswith("layers/") for n in names)
+    assert any(n.startswith("layers/") for n in files)
+
+
 def test_pid_and_metadata_xml_api():
     from fastapi.testclient import TestClient
 
