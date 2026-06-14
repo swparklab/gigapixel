@@ -23,6 +23,8 @@ class Session(Base):
     width: Mapped[int | None] = mapped_column(Integer, nullable=True)
     height: Mapped[int | None] = mapped_column(Integer, nullable=True)
     tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # comma-separated auto-tags
+    metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # Dublin Core descriptive metadata
+    pixels_per_mm: Mapped[float | None] = mapped_column(Float, nullable=True)  # dimensional calibration
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True),
@@ -68,6 +70,12 @@ class Annotation(Base):
     x: Mapped[float] = mapped_column(Float)
     y: Mapped[float] = mapped_column(Float)
     text: Mapped[str] = mapped_column(Text)
+    # Region annotations: shape + extent + controlled-vocabulary tags.
+    shape: Mapped[str] = mapped_column(String(16), default="point")  # point|rect|polygon
+    w: Mapped[float | None] = mapped_column(Float, nullable=True)
+    h: Mapped[float | None] = mapped_column(Float, nullable=True)
+    points_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # polygon points
+    tags: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     session: Mapped[Session] = relationship("Session", back_populates="annotations")

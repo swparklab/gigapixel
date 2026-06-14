@@ -244,6 +244,13 @@ Important distinction: classic processing uses a queued polling agent. Node work
 | `POST` | `/api/sessions/{session_id}/upscale` | Interactive local upscale (factor) |
 | `POST` | `/api/sessions/{session_id}/to3d` | Image-to-3D (splat / mesh / depth / normals) |
 | `GET` | `/api/sessions/{session_id}/3d/{file}` | Serve 3D assets (.splat/.ply/.obj/.glb/...) |
+| `GET` | `/api/sessions` | Sessions dashboard (status, QC, tags) |
+| `GET`/`PUT` | `/api/sessions/{session_id}/metadata` | Dublin Core descriptive metadata |
+| `POST` | `/api/sessions/{session_id}/scale-set` | Persist mm/px scale calibration |
+| `GET` | `/api/sessions/{session_id}/iiif/annotations` | IIIF AnnotationPage export |
+| `GET` | `/report/{session_id}` | Printable condition report |
+| `GET` | `/relief/{session_id}` | Raking-light (RTI) relief viewer |
+| `GET` | `/api/sessions/{session_id}/archive` | BagIt archival package |
 | `GET` | `/api/sessions/{session_id}/tiles/{tile_path}` | Serve DZI tile |
 | `GET` | `/api/sessions/{session_id}/annotations` | List annotations |
 | `POST` | `/api/sessions/{session_id}/annotations` | Create annotation |

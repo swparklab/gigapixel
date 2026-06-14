@@ -23,6 +23,15 @@ _ADDITIVE_COLUMNS = {
     },
     "sessions": {
         "tags": "TEXT",
+        "metadata_json": "TEXT",
+        "pixels_per_mm": "FLOAT",
+    },
+    "annotations": {
+        "shape": "VARCHAR(16) DEFAULT 'point'",
+        "w": "FLOAT",
+        "h": "FLOAT",
+        "points_json": "TEXT",
+        "tags": "TEXT",
     },
 }
 

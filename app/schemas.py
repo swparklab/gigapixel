@@ -18,12 +18,49 @@ class SessionRead(BaseModel):
     updated_at: dt.datetime
     error_message: str | None = None
     share_url: str
+    tags: str | None = None
+    pixels_per_mm: float | None = None
+
+
+class SessionSummary(BaseModel):
+    id: str
+    name: str
+    status: str
+    width: int | None = None
+    height: int | None = None
+    tags: str | None = None
+    quality_verdict: str | None = None
+    created_at: dt.datetime
+    thumbnail_url: str | None = None
+
+
+class MetadataUpdate(BaseModel):
+    # Dublin Core / cataloguing fields (all optional, free text).
+    title: str | None = None
+    creator: str | None = None
+    date: str | None = None
+    material: str | None = None
+    dimensions: str | None = None
+    repository: str | None = None
+    accession_number: str | None = None
+    description: str | None = None
+    rights: str | None = None
+    subject: str | None = None
+
+
+class ScaleSetRequest(BaseModel):
+    pixels_per_mm: float = Field(gt=0)
 
 
 class AnnotationCreate(BaseModel):
     x: float
     y: float
     text: str = Field(min_length=1, max_length=2000)
+    shape: str = Field(default="point", pattern="^(point|rect|polygon)$")
+    w: float | None = None
+    h: float | None = None
+    points: list[list[float]] | None = None
+    tags: str | None = Field(default=None, max_length=500)
 
 
 class AnnotationRead(BaseModel):
@@ -32,6 +69,11 @@ class AnnotationRead(BaseModel):
     x: float
     y: float
     text: str
+    shape: str = "point"
+    w: float | None = None
+    h: float | None = None
+    points: list[list[float]] | None = None
+    tags: str | None = None
     created_at: dt.datetime
 
 

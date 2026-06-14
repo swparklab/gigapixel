@@ -22,6 +22,7 @@ This project is designed for digital heritage acquisition and restoration workfl
 - Focus-robust registration: per-image sharpness normalization for consistent keypoints, plus optical-flow elastic overlap alignment that removes the ghosting/"breaking" caused by focus or detected-point mismatch.
 - Interactive local upscaling: pick a factor on the finished mosaic and run a high-quality upscale (ComfyUI Flux / diffusers SD-x4 / Real-ESRGAN / Lanczos).
 - Versatile image-to-3D: turn the mosaic into 3D Gaussian Splatting (`.ply`/`.splat`), a textured relief mesh (`.obj`/`.glb`), or depth/normal maps, explorable in-browser with a real Gaussian-splat renderer and a mesh viewer (optional TRELLIS / Hunyuan3D backends).
+- Curator/scholar workbench: descriptive (Dublin Core) metadata, on-image measurement in mm (scale calibration), region annotations with tags exported as IIIF AnnotationPages, citable IIIF region deep-links, a printable condition report, a raking-light (RTI-style) relief viewer, a sessions dashboard, and BagIt archival export.
 - Tiled multi-band blending that preserves multi-band quality at gigapixel scale instead of degrading to feather compositing.
 - Automatic output quality control (interior-hole, coverage, sharpness, seam, registration, and learned no-reference quality checks) with an `ok`/`warn`/`broken` verdict and a `quality_report.json` sidecar.
 - Automatic repair of enclosed holes via inpainting (optional LaMa deep backend, classical fallback).
@@ -372,6 +373,39 @@ Assets are served under `GET /api/sessions/{id}/3d/{file}` (`.splat`, `.ply`,
 `.obj`, `.mtl`, `.glb`, `.png`, `.jpg`). Verification: **53 tests pass**,
 including `.splat` geometry and textured-mesh export.
 
+## Update Notes — Curator & Scholar Workbench
+
+A user-needs pass for curators / 학예연구사, conservators and heritage
+researchers, turning the engine into a working tool:
+
+1. **Descriptive metadata** (Dublin Core) per session
+   (`GET`/`PUT .../metadata`), embedded in a `metadata.json` sidecar and the
+   archival package.
+2. **On-image measurement** — calibrate scale (mm/px) from a known length or a
+   fiducial; the viewer's **Measure** tool reports distances in mm/cm. Stored as
+   `pixels_per_mm` and used throughout (report, IIIF).
+3. **Region annotations + tags** — rectangle/polygon annotations with
+   controlled-vocabulary tags ([`models`](app/models.py) extended), exported as
+   a **IIIF Presentation 3.0 AnnotationPage** (`.../iiif/annotations`).
+4. **Citable region deep-links** — the viewer **Cite region** button copies a
+   `?xywh=` deep-link (restored on load) and a **IIIF region image URL** for
+   scholarly citation.
+5. **Printable condition report** ([`reporting.py`](app/services/reporting.py),
+   `/report/{id}`) — object metadata, QC verdict, colour ΔE/FADGI, AI condition
+   findings, provenance, fixity and annotations in one print-to-PDF document.
+6. **Raking-light (RTI-style) viewer** ([`relief.html`](app/templates/relief.html),
+   `/relief/{id}`) — WebGL relighting of the normal map; move the mouse to rake
+   the light across the surface relief.
+7. **Sessions dashboard** (`GET /api/sessions`) — a searchable gallery on the
+   home page with status, QC verdict and tags.
+8. **BagIt archival export** ([`archive.py`](app/services/archive.py),
+   `.../archive`) — a Library-of-Congress **BagIt 1.0** zip with SHA-256 payload
+   checksums for repository ingest.
+
+Verification: **56 tests pass**, including the condition report, a valid BagIt
+package, and metadata/scale/region-annotation APIs
+([`tests/test_curator.py`](tests/test_curator.py)).
+
 ## Project Status
 
 This repository is an active research and engineering prototype.
@@ -566,6 +600,13 @@ The agent emits structured JSON logs. Example:
 | Outpaint | `POST /api/sessions/{session_id}/outpaint` · `/download/outpainted` · `/outpaint-mask` |
 | Upscale | `POST /api/sessions/{session_id}/upscale` · `/download/upscaled` |
 | Image-to-3D | `POST /api/sessions/{session_id}/to3d` · assets at `/3d/{file}` · explorer `/viewer3d/{id}` |
+| Sessions dashboard | `GET /api/sessions` |
+| Metadata (Dublin Core) | `GET`/`PUT /api/sessions/{session_id}/metadata` |
+| Scale calibration | `POST /api/sessions/{session_id}/scale-set` |
+| IIIF annotations | `GET /api/sessions/{session_id}/iiif/annotations` |
+| Condition report | `/report/{session_id}` |
+| Raking-light viewer | `/relief/{session_id}` |
+| BagIt archive | `GET /api/sessions/{session_id}/archive` |
 
 ## Typical Workflow
 

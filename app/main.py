@@ -25,8 +25,11 @@ from .schemas import (
     CoverageResponse,
     DamageResponse,
     FocusStackResponse,
+    MetadataUpdate,
     OutpaintRequest,
     OutpaintResponse,
+    ScaleSetRequest,
+    SessionSummary,
     ReconResponse,
     SearchResponse,
     TagsResponse,
@@ -164,6 +167,32 @@ def _serialize_session(session: SessionModel, request: Request, db: Session) -> 
         updated_at=session.updated_at,
         error_message=session.error_message,
         share_url=share_url,
+        tags=session.tags,
+        pixels_per_mm=session.pixels_per_mm,
+    )
+
+
+def _serialize_annotation(row) -> "AnnotationRead":
+    import json as _json
+
+    points = None
+    if getattr(row, "points_json", None):
+        try:
+            points = _json.loads(row.points_json)
+        except Exception:
+            points = None
+    return AnnotationRead(
+        id=row.id,
+        session_id=row.session_id,
+        x=row.x,
+        y=row.y,
+        text=row.text,
+        shape=getattr(row, "shape", None) or "point",
+        w=getattr(row, "w", None),
+        h=getattr(row, "h", None),
+        points=points,
+        tags=getattr(row, "tags", None),
+        created_at=row.created_at,
     )
 
 
@@ -208,6 +237,174 @@ def get_session(session_id: str, request: Request, db: Session = Depends(get_db)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     return _serialize_session(session, request, db)
+
+
+def _read_sidecar(session_id: str, rel: str):
+    import json as _json
+
+    path = output_dir(session_id) / rel
+    if path.exists():
+        try:
+            return _json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+    return None
+
+
+@app.get(f"{settings.api_prefix}/sessions", response_model=list[SessionSummary])
+def list_sessions(q: str | None = None, status: str | None = None, limit: int = 100, db: Session = Depends(get_db)):
+    """Dashboard: recent sessions with status, tags and QC verdict."""
+    query = db.query(SessionModel)
+    if status:
+        query = query.filter(SessionModel.status == status)
+    if q:
+        like = f"%{q}%"
+        query = query.filter((SessionModel.name.ilike(like)) | (SessionModel.tags.ilike(like)))
+    rows = query.order_by(SessionModel.created_at.desc()).limit(max(1, min(500, limit))).all()
+    out = []
+    for s in rows:
+        verdict = (_read_sidecar(s.id, "quality_report.json") or {}).get("verdict")
+        thumb = f"{settings.api_prefix}/sessions/{s.id}/download/optimized" if s.status == "ready" else None
+        out.append(
+            SessionSummary(
+                id=s.id, name=s.name, status=s.status, width=s.width, height=s.height,
+                tags=s.tags, quality_verdict=verdict, created_at=s.created_at, thumbnail_url=thumb,
+            )
+        )
+    return out
+
+
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/metadata")
+def get_metadata(session_id: str, db: Session = Depends(get_db)):
+    import json as _json
+
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    try:
+        return _json.loads(session.metadata_json) if session.metadata_json else {}
+    except Exception:
+        return {}
+
+
+@app.put(f"{settings.api_prefix}/sessions/{{session_id}}/metadata")
+def set_metadata(session_id: str, payload: MetadataUpdate, db: Session = Depends(get_db)):
+    import json as _json
+
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    meta = {k: v for k, v in payload.model_dump().items() if v not in (None, "")}
+    session.metadata_json = _json.dumps(meta, ensure_ascii=False)
+    db.commit()
+    # Persist a metadata sidecar for archival packaging.
+    try:
+        (output_dir(session_id) / "metadata.json").write_text(
+            _json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except Exception:
+        pass
+    return meta
+
+
+@app.post(f"{settings.api_prefix}/sessions/{{session_id}}/scale-set")
+def set_scale(session_id: str, payload: ScaleSetRequest, db: Session = Depends(get_db)):
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    session.pixels_per_mm = float(payload.pixels_per_mm)
+    db.commit()
+    return {"pixels_per_mm": session.pixels_per_mm, "dpi": round(session.pixels_per_mm * 25.4, 2)}
+
+
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/iiif/annotations")
+def get_iiif_annotations(session_id: str, db: Session = Depends(get_db)):
+    """Export region annotations as a IIIF Presentation 3.0 AnnotationPage."""
+    import json as _json
+
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    base = f"{settings.api_prefix}/sessions/{session_id}/iiif"
+    canvas = f"{base}/canvas/1"
+    items = []
+    for a in db.query(Annotation).filter(Annotation.session_id == session_id).order_by(Annotation.id.asc()).all():
+        if a.shape == "rect" and a.w and a.h:
+            target = f"{canvas}#xywh={int(a.x)},{int(a.y)},{int(a.w)},{int(a.h)}"
+        else:
+            target = f"{canvas}#xywh={int(a.x) - 8},{int(a.y) - 8},16,16"
+        body = [{"type": "TextualBody", "value": a.text, "format": "text/plain"}]
+        if a.tags:
+            for tag in str(a.tags).split(","):
+                if tag.strip():
+                    body.append({"type": "TextualBody", "value": tag.strip(), "purpose": "tagging"})
+        items.append(
+            {"id": f"{base}/annotation/{a.id}", "type": "Annotation", "motivation": "commenting",
+             "body": body, "target": target}
+        )
+    return {
+        "@context": "http://iiif.io/api/presentation/3/context.json",
+        "id": f"{base}/annotations", "type": "AnnotationPage", "items": items,
+    }
+
+
+@app.get(f"{settings.api_prefix}/sessions/{{session_id}}/archive")
+def download_archive(session_id: str, db: Session = Depends(get_db)):
+    from fastapi import Response
+
+    from .services.archive import build_bagit
+
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.status != "ready":
+        raise HTTPException(status_code=409, detail="Session is not ready yet")
+    data = build_bagit(session_id, session.name, output_dir(session_id))
+    name = build_download_filename(session, variant="bagit", file_path=Path("x.zip"))
+    return Response(
+        content=data, media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
+@app.get("/report/{session_id}", response_class=HTMLResponse)
+def report_page(session_id: str, request: Request, db: Session = Depends(get_db)):
+    import json as _json
+
+    session = db.get(SessionModel, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    from .services.reporting import render_report
+
+    image_count = db.query(func.count(SourceImage.id)).filter(SourceImage.session_id == session_id).scalar() or 0
+    annotations = [_serialize_annotation(a).model_dump() for a in
+                   db.query(Annotation).filter(Annotation.session_id == session_id).order_by(Annotation.id.asc()).all()]
+    metadata = {}
+    try:
+        metadata = _json.loads(session.metadata_json) if session.metadata_json else {}
+    except Exception:
+        metadata = {}
+    context = {
+        "session": {
+            "id": session.id, "name": session.name, "status": session.status,
+            "width": session.width, "height": session.height, "image_count": image_count,
+            "tags": session.tags, "pixels_per_mm": session.pixels_per_mm,
+        },
+        "metadata": metadata,
+        "quality": _read_sidecar(session_id, "quality_report.json"),
+        "color": _read_sidecar(session_id, "color_report.json"),
+        "condition": _read_sidecar(session_id, "condition_report.json"),
+        "provenance": _read_sidecar(session_id, "provenance.json"),
+        "manifest": _read_sidecar(session_id, "processing_manifest.json"),
+        "annotations": annotations,
+    }
+    return HTMLResponse(render_report(context))
+
+
+@app.get("/relief/{session_id}", response_class=HTMLResponse)
+def relief_page(session_id: str, request: Request):
+    return templates.TemplateResponse("relief.html", {"request": request, "session_id": session_id})
 
 
 @app.post(f"{settings.api_prefix}/sessions/{{session_id}}/images")
@@ -461,6 +658,9 @@ def calibrate_scale(session_id: str, payload: ScaleRequest, db: Session = Depend
 
             bgr = cv2.cvtColor(np.asarray(src.convert("RGB")), cv2.COLOR_RGB2BGR)
         result = scale_from_marker(bgr, payload.marker_length_mm)
+    if result.calibrated and result.pixels_per_mm:
+        session.pixels_per_mm = float(result.pixels_per_mm)
+        db.commit()
     return ScaleResponse(**result.to_dict())
 
 
@@ -945,17 +1145,7 @@ def get_tile(session_id: str, tile_path: str, db: Session = Depends(get_db)):
 @app.get(f"{settings.api_prefix}/sessions/{{session_id}}/annotations", response_model=list[AnnotationRead])
 def list_annotations(session_id: str, db: Session = Depends(get_db)):
     rows = db.query(Annotation).filter(Annotation.session_id == session_id).order_by(Annotation.id.asc()).all()
-    return [
-        AnnotationRead(
-            id=row.id,
-            session_id=row.session_id,
-            x=row.x,
-            y=row.y,
-            text=row.text,
-            created_at=row.created_at,
-        )
-        for row in rows
-    ]
+    return [_serialize_annotation(row) for row in rows]
 
 
 @app.get(f"{settings.api_prefix}/sessions/{{session_id}}/download")
@@ -1076,19 +1266,23 @@ def create_annotation(session_id: str, payload: AnnotationCreate, db: Session = 
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    row = Annotation(session_id=session_id, x=payload.x, y=payload.y, text=payload.text)
+    import json as _json
+
+    row = Annotation(
+        session_id=session_id,
+        x=payload.x,
+        y=payload.y,
+        text=payload.text,
+        shape=payload.shape,
+        w=payload.w,
+        h=payload.h,
+        points_json=_json.dumps(payload.points) if payload.points else None,
+        tags=payload.tags,
+    )
     db.add(row)
     db.commit()
     db.refresh(row)
-
-    return AnnotationRead(
-        id=row.id,
-        session_id=row.session_id,
-        x=row.x,
-        y=row.y,
-        text=row.text,
-        created_at=row.created_at,
-    )
+    return _serialize_annotation(row)
 
 
 @app.delete(f"{settings.api_prefix}/annotations/{{annotation_id}}")

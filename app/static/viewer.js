@@ -432,6 +432,11 @@ async function initViewer() {
     const webPoint = evt.position;
     const viewportPoint = viewer.viewport.pointFromPixel(webPoint);
     const imagePoint = viewer.viewport.viewportToImageCoordinates(viewportPoint);
+    if (measureMode) {
+      evt.preventDefaultAction = true;
+      handleMeasureClick(imagePoint);
+      return;
+    }
     pendingPoint = { x: imagePoint.x, y: imagePoint.y };
     updatePendingPointText();
     updateSaveButtonState();
@@ -444,6 +449,7 @@ async function initViewer() {
   injectSmartControls();
   bindViewerToolbar();
   await loadAnnotations();
+  restoreDeepLink();
 }
 
 // --- AI smart annotation (Segment Anything / GrabCut) ----------------------
@@ -582,6 +588,101 @@ function injectSmartControls() {
     reports.appendChild(a);
   });
   host.appendChild(reports);
+
+  // Curator / scholar tools row (measure, cite, report, archive, relief).
+  const tools = document.createElement("div");
+  tools.className = "smart-annotate-panel";
+  tools.style.cssText =
+    "position:absolute;bottom:12px;left:12px;z-index:30;display:flex;gap:6px;flex-wrap:wrap;";
+  const measureBtn = mkBtn(ko0 ? "📏 측정" : "📏 Measure", async () => {
+    measureMode = !measureMode;
+    measurePoints = [];
+    measureBtn.classList.toggle("is-active", measureMode);
+    setMeta(measureMode ? (ko0 ? "두 점을 클릭해 거리를 측정" : "Click two points to measure") : "");
+  });
+  const citeBtn = mkBtn(ko0 ? "🔗 영역 인용" : "🔗 Cite region", async () => copyRegionLink());
+  tools.appendChild(measureBtn);
+  tools.appendChild(citeBtn);
+  [
+    [ko0 ? "📄 보고서" : "📄 Report", `/report/${sessionId}`],
+    [ko0 ? "💡 레이킹광" : "💡 Raking", `/relief/${sessionId}`],
+    [ko0 ? "📦 아카이브(BagIt)" : "📦 Archive (BagIt)", `/api/sessions/${sessionId}/archive`],
+  ].forEach(([label, href]) => {
+    const a = document.createElement("a");
+    a.href = href; a.target = "_blank"; a.rel = "noopener"; a.textContent = label; a.className = "aether-report-link";
+    tools.appendChild(a);
+  });
+  host.appendChild(tools);
+}
+
+let measureMode = false;
+let measurePoints = [];
+
+function setMeta(text) {
+  const el = document.getElementById("viewerSubtitle");
+  if (el && text) el.textContent = text;
+}
+
+function handleMeasureClick(imagePoint) {
+  measurePoints.push(imagePoint);
+  if (measurePoints.length < 2) {
+    setMeta(currentLang() === "ko" ? "두 번째 점을 클릭하세요" : "Click the second point");
+    return;
+  }
+  const [a, b] = measurePoints;
+  const px = Math.hypot(b.x - a.x, b.y - a.y);
+  measurePoints = [];
+  const ko = currentLang() === "ko";
+  const ppm = currentSession && currentSession.pixels_per_mm;
+  if (ppm) {
+    const mm = px / ppm;
+    const txt = mm >= 10 ? `${(mm / 10).toFixed(2)} cm` : `${mm.toFixed(2)} mm`;
+    setMeta(ko ? `거리: ${txt}  (${px.toFixed(0)} px)` : `Distance: ${txt}  (${px.toFixed(0)} px)`);
+  } else {
+    const known = prompt(ko ? "이 선의 실제 길이(mm)를 입력하면 스케일을 보정합니다:" : "Enter the real length of this line in mm to calibrate scale:");
+    const mm = Number(known);
+    if (mm > 0) {
+      const ppmNew = px / mm;
+      fetch(`/api/sessions/${sessionId}/scale-set`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pixels_per_mm: ppmNew }),
+      }).then(() => { if (currentSession) currentSession.pixels_per_mm = ppmNew; });
+      setMeta(ko ? `스케일 보정됨: ${ppmNew.toFixed(3)} px/mm` : `Scale calibrated: ${ppmNew.toFixed(3)} px/mm`);
+    }
+  }
+}
+
+function currentImageRect() {
+  const b = viewer.viewport.viewportToImageRectangle(viewer.viewport.getBounds());
+  return {
+    x: Math.max(0, Math.round(b.x)), y: Math.max(0, Math.round(b.y)),
+    w: Math.round(b.width), h: Math.round(b.height),
+  };
+}
+
+async function copyRegionLink() {
+  const r = currentImageRect();
+  const origin = window.location.origin;
+  const iiif = `${origin}/api/sessions/${sessionId}/iiif/${r.x},${r.y},${r.w},${r.h}/max/0/default.jpg`;
+  const deep = `${origin}/viewer/${sessionId}?xywh=${r.x},${r.y},${r.w},${r.h}`;
+  const text = `${deep}\n${iiif}`;
+  try {
+    await navigator.clipboard.writeText(text);
+    setMeta(currentLang() === "ko" ? "영역 링크(딥링크+IIIF)를 복사했습니다" : "Region links (deep link + IIIF) copied");
+  } catch (e) {
+    window.prompt(currentLang() === "ko" ? "영역 링크:" : "Region links:", text);
+  }
+}
+
+function restoreDeepLink() {
+  const params = new URLSearchParams(window.location.search);
+  const xywh = params.get("xywh");
+  if (!xywh) return;
+  const [x, y, w, h] = xywh.split(",").map(Number);
+  if ([x, y, w, h].some((v) => Number.isNaN(v))) return;
+  try {
+    const rect = viewer.viewport.imageToViewportRectangle(new OpenSeadragon.Rect(x, y, w, h));
+    viewer.viewport.fitBounds(rect, true);
+  } catch (e) {}
 }
 
 function _polygonCentroid(points) {

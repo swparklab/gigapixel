@@ -97,7 +97,71 @@
       <button id="calculatePlanBtn" type="button" class="secondary">Calculate Capture Plan</button>
       <div id="plannerResult" class="planner-result" aria-live="polite"></div>
     </section>
+
+    <section class="panel" id="galleryPanel" style="margin-top:var(--space-5)">
+      <div class="planner-head">
+        <div>
+          <h2 id="galleryTitle">Collection</h2>
+          <p id="gallerySubtitle" class="muted">Processed sessions with status and quality.</p>
+        </div>
+        <input id="gallerySearch" type="search" placeholder="Search name / tags" style="max-width:240px" />
+      </div>
+      <div id="sessionGallery" class="session-gallery"></div>
+    </section>
   </main>
+
+  <style>
+    .session-gallery { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:var(--space-3); margin-top:var(--space-3); }
+    .sg-card { display:flex; flex-direction:column; border:1px solid var(--line); border-radius:var(--radius-md); overflow:hidden; background:var(--color-surface); text-decoration:none; color:var(--text); transition:border-color .15s ease, box-shadow .2s ease; }
+    .sg-card:hover { border-color:var(--accent); box-shadow:var(--shadow-md); }
+    .sg-thumb { aspect-ratio:4/3; background:var(--color-surface-subtle) center/cover no-repeat; }
+    .sg-body { padding:10px 12px; display:flex; flex-direction:column; gap:5px; }
+    .sg-name { font-weight:600; font-size:.92rem; line-height:1.25; }
+    .sg-meta { display:flex; gap:6px; align-items:center; flex-wrap:wrap; font-family:var(--font-mono); font-size:.7rem; color:var(--muted); }
+    .sg-badge { padding:2px 9px; border-radius:999px; border:1px solid var(--line); }
+    .sg-badge.ok { color:var(--color-success); border-color:var(--color-success); }
+    .sg-badge.warn { color:var(--color-warning); border-color:var(--color-warning); }
+    .sg-badge.broken { color:var(--color-danger); border-color:var(--color-danger); }
+    .sg-empty { color:var(--muted); grid-column:1/-1; padding:16px 0; }
+  </style>
+  <script>
+    (function () {
+      const grid = document.getElementById("sessionGallery");
+      const search = document.getElementById("gallerySearch");
+      const ko = (document.documentElement.getAttribute("data-lang") || "en") === "ko";
+      if (ko) {
+        document.getElementById("galleryTitle").textContent = "컬렉션";
+        document.getElementById("gallerySubtitle").textContent = "처리된 세션과 상태·품질을 한눈에.";
+        search.placeholder = "이름/태그 검색";
+      }
+      async function load() {
+        try {
+          const q = search.value.trim();
+          const res = await fetch("/api/sessions" + (q ? `?q=${encodeURIComponent(q)}` : "?limit=60"));
+          const rows = await res.json();
+          grid.innerHTML = "";
+          if (!rows.length) { grid.innerHTML = `<div class="sg-empty">${ko ? "아직 세션이 없습니다." : "No sessions yet."}</div>`; return; }
+          rows.forEach((s) => {
+            const card = document.createElement("a");
+            card.className = "sg-card"; card.href = `/viewer/${s.id}`;
+            const thumb = document.createElement("div"); thumb.className = "sg-thumb";
+            if (s.thumbnail_url) thumb.style.backgroundImage = `url(${s.thumbnail_url})`;
+            const body = document.createElement("div"); body.className = "sg-body";
+            const name = document.createElement("div"); name.className = "sg-name"; name.textContent = s.name || s.id.slice(0, 8);
+            const meta = document.createElement("div"); meta.className = "sg-meta";
+            const st = document.createElement("span"); st.className = "sg-badge " + (s.quality_verdict || ""); st.textContent = s.quality_verdict || s.status;
+            meta.appendChild(st);
+            if (s.width) { const dim = document.createElement("span"); dim.textContent = `${s.width}×${s.height}`; meta.appendChild(dim); }
+            if (s.tags) { const tg = document.createElement("span"); tg.textContent = s.tags.split(",").slice(0, 2).join(" · "); meta.appendChild(tg); }
+            body.appendChild(name); body.appendChild(meta);
+            card.appendChild(thumb); card.appendChild(body); grid.appendChild(card);
+          });
+        } catch (e) { grid.innerHTML = ""; }
+      }
+      let t; search.addEventListener("input", () => { clearTimeout(t); t = setTimeout(load, 250); });
+      load();
+    })();
+  </script>
 
   <script src="/static/ui-prefs.js"></script>
   <script src="/static/index.js"></script>
