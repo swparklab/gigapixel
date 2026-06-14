@@ -778,9 +778,58 @@ Install libvips and enable `pyvips`. Pillow fallback is only a fallback and is n
 
 No open-source license file is currently present. Add a `LICENSE` file before publishing this repository as a public open-source project.
 
+## 연구개발 과제 정보 (KOCCA)
+
+### 과제 개요
+
+| 항목 | 내용 |
+| --- | --- |
+| 사업 | 문화체육관광부 · 한국콘텐츠진흥원(KOCCA) 2024년도 문화체육관광 연구개발사업 |
+| 과제명 | 복합소재 문화유산 고품질 복원을 위한 디지털 문화유산 획득용 광학기술 및 공유 플랫폼 기술 개발 |
+| 과제번호 | RS-2024-00442410 |
+
+### 컨소시엄
+
+- **주관기관**: 한국전자통신연구원(ETRI)
+- **참여기관**: 서울대학교 산학협력단 · 고려대학교 세종산학협력단 · 경북대학교 산학협력단 · 주식회사 포스트미디어 · 주식회사 프리다츠
+
+### 요약 (Summary)
+
+복합소재로 구성된 문화유산을 **비접촉으로 3차원 복원·보존**하기 위해, 초정밀 광학 획득(홀로그램 현미경 · 타이코그래피)으로 형상을 복원하고 고유의 **색감·질감을 획득·모사**하며, **AI 기반 손상부위 가상복원**과 **저작권 보호·인증** 기술을 결합한다. 이를 통해 **디지털 문화유산 보존 플랫폼**과, 온라인 신기술융합콘텐츠 및 오프라인(홀로그램 프린팅 · XR 전시) 실감 체험 콘텐츠 서비스를 구현하는 것을 목표로 한다.
+
+> *English* — An ETRI-led consortium developing non-contact 3D acquisition and restoration of composite-material cultural heritage: precision optics (holographic microscopy, ptychography) for shape recovery, colour/texture acquisition and reproduction, AI virtual restoration of damaged regions, and content rights protection — delivered through a digital-heritage preservation platform and online/offline (hologram printing, XR) immersive experience content.
+
+### 최종 목표
+
+복합소재 문화유산 대상 **비접촉 3차원 정보 복원·보전**을 위한 색감/질감 획득 기반 표면결합 진단 기술과, 문화유산 중요정보 전용 **저작권 보호** 기술을 개발하여 **문화유산 데이터 보존용 플랫폼**을 구축하고, 온라인 신기술융합콘텐츠와 **홀로그램 프린팅** 기반 오프라인 체험 콘텐츠 서비스를 구현한다.
+
+### 연구개발 내용 (요약)
+
+1. **비접촉 3차원 정보 획득/복원** — 강체용 홀로그램 현미경(서브-마이크로급 분해능)과 비강체용 타이코그래피 광학계, 부분 형상 복원 → 전체 형상 복원·측정·분석.
+2. **복원·예측 관리** — 유사 문화유산 학습 알고리즘, **AI 기반 손상 부위 가상 복원**.
+3. **고유 질감 모사·편집** — 비균질 텍스처를 위한 고유 색상 취득·샘플링, 광택 편집·매칭, 원형 대비 비교 분석.
+4. **통합 디지털 플랫폼** — 데이터 전용 위·변조 방지 및 인증, 3차원 대용량 콘텐츠 고속 암·복호화, 단계별 활용 권한 관리, 사용자별 고유 식별자 삽입, 서비스 테스트베드 및 신기술융합콘텐츠 제작.
+
+### 기대 효과
+
+- **기술적** — 홀로그램 현미경·타이코그래피 결합 광학계와 3D + 분광복사휘도 정보 합성으로 초정밀 3D 획득·복원 독보적 기술 확보.
+- **경제·산업적** — 수입 의존도가 높은 3D 스캐너의 **국산화** 기여.
+- **문화·사회적** — 객체 고유의 색상·재질 재현으로 현실감을 높인 **증강현실 문화공간** 구축 및 고부가가치 활용.
+
+### 핵심어 (Keywords)
+
+디지털 문화유산 · 복합소재 · 정밀 광학기술 · 색감과 질감 · 복원과 보존
+*Digital cultural heritage · Composite material · Precision optical technology · Color and Texture · Restoration and preservation*
+
+### 본 저장소의 위치
+
+**Hyper Gigapixel Agent**는 위 과제 가운데 **디지털 문화유산의 고품질 획득·정합·검수·공유 플랫폼** 영역에 해당하는 연구용 구현이다 — 기가픽셀 이미지 스티칭, 색·질감 정밀 정합/검수(컬러 ΔE2000·FADGI), AI 손상 탐지·복원, 출처/무결성 기록, 3D 탐색, IIIF 기반 공유를 제공한다.
+
 ## Research Acknowledgement
 
-본고는 문화체육관광부 및 한국콘텐츠진흥원(KOCCA)의 2024년도 문화체육관광연구개발사업으로 수행되었음. 과제명: 복합소재 문화유산 고품질 복원을 위한 디지털 문화유산 획득용 광학기술 및 공유 플랫폼 기술 개발 과제번호: RS-2024-00442410
+본 연구는 문화체육관광부 및 한국콘텐츠진흥원(KOCCA)의 2024년도 문화체육관광 연구개발사업으로 수행되었음. 과제명: 복합소재 문화유산 고품질 복원을 위한 디지털 문화유산 획득용 광학기술 및 공유 플랫폼 기술 개발. 과제번호: RS-2024-00442410.
+
+This work was supported by the Ministry of Culture, Sports and Tourism and the Korea Creative Content Agency (KOCCA) under the 2024 Culture, Sports and Tourism R&D Program (Project No. RS-2024-00442410).
 
 
 
