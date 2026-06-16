@@ -49,6 +49,112 @@ def _classical(bgr: np.ndarray, factor: float, log: LogFn) -> np.ndarray:
     return np.clip(sharp, 0, 255).astype(np.uint8)
 
 
+def _hat(bgr: np.ndarray, factor: float, log: LogFn) -> np.ndarray | None:
+    """HAT (Hybrid Attention Transformer, 2023/2024) super-resolution.
+
+    Outperforms Real-ESRGAN on PSNR/SSIM benchmarks for photographic content.
+    Supports x2/x4 scale. Requires ``basicsr`` and HAT checkpoint from HuggingFace
+    (XPixelGroup/HAT-L_SRx4_ImageNet-pretrain or Real_HAT_GAN_SRx4).
+    pip install basicsr
+    """
+    try:
+        import torch  # type: ignore
+        from basicsr.archs.hat_arch import HAT as HATModel  # type: ignore
+        from basicsr.utils import img2tensor, tensor2img  # type: ignore
+        import yaml  # type: ignore
+        from pathlib import Path as _Path
+    except Exception:
+        return None
+    try:
+        scale = int(round(factor))
+        if scale not in (2, 4):
+            return None
+        checkpoint_path = str(getattr(settings, f"hat_checkpoint_x{scale}", "") or "").strip()
+        if not checkpoint_path or not _Path(checkpoint_path).exists():
+            # Try HuggingFace hub download if huggingface_hub is available.
+            try:
+                from huggingface_hub import hf_hub_download  # type: ignore
+                repo = "XPixelGroup/HAT"
+                filename = f"Real_HAT_GAN_SRx{scale}.pth"
+                checkpoint_path = hf_hub_download(repo_id=repo, filename=f"experiments/pretrained_models/{filename}")
+            except Exception:
+                return None
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        model = HATModel(
+            upscale=scale,
+            in_chans=3,
+            img_size=64,
+            window_size=16,
+            compress_ratio=3,
+            squeeze_factor=30,
+            conv_scale=0.01,
+            overlap_ratio=0.5,
+            img_range=1.0,
+            depths=[6, 6, 6, 6, 6, 6],
+            embed_dim=180,
+            num_heads=[6, 6, 6, 6, 6, 6],
+            mlp_ratio=2,
+            upsampler="pixelshuffle",
+            resi_connection="1conv",
+        ).to(device).eval()
+        state = torch.load(checkpoint_path, map_location=device, weights_only=True)
+        model.load_state_dict(state.get("params_ema", state.get("params", state)), strict=False)
+
+        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+        tensor = torch.from_numpy(rgb.transpose(2, 0, 1))[None].to(device)
+        with torch.inference_mode():
+            out = model(tensor).squeeze(0).clamp(0, 1).cpu().numpy()
+        result = cv2.cvtColor((out.transpose(1, 2, 0) * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
+        log(f"[upscale] HAT x{scale}")
+        return result
+    except Exception as exc:
+        log(f"[upscale] HAT failed: {exc}")
+        return None
+
+
+def _supir(bgr: np.ndarray, factor: float, log: LogFn) -> np.ndarray | None:
+    """SUPIR (2024): generative upscaling with SDXL + SUPIR-v0Q checkpoint.
+
+    Produces photorealistic detail restoration at 4x–8x, best quality for
+    heritage digitization. Requires ~24 GB VRAM for full quality; F model
+    (~12 GB) available as a lighter option.
+    pip install SUPIR  (or clone from github.com/Fanghua-Yu/SUPIR)
+    """
+    try:
+        from SUPIR.util import create_SUPIR_model, PIL2Tensor, Tensor2PIL  # type: ignore
+        from PIL import Image as _PIL  # type: ignore
+        import torch  # type: ignore
+    except Exception:
+        return None
+    try:
+        ckpt = str(getattr(settings, "supir_checkpoint", "") or "").strip()
+        sdxl_ckpt = str(getattr(settings, "supir_sdxl_checkpoint", "") or "").strip()
+        if not ckpt:
+            return None
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        if device == "cpu":
+            log("[upscale] SUPIR requires CUDA; skipping")
+            return None
+        model = create_SUPIR_model("options/SUPIR_v0.yaml", SUPIR_sign="Q").to(device)
+        model.load_state_dict(torch.load(ckpt, map_location=device, weights_only=True), strict=False)
+        model.eval()
+        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+        lq = PIL2Tensor(_PIL.fromarray(rgb)).unsqueeze(0).to(device)
+        with torch.inference_mode():
+            results = model.batchify_sample(lq, a_prompt="high resolution, detailed", n_a_prompt="", edm_steps=50, s_stage1=-1, s_cfg=7.5, seed=42)
+        out = Tensor2PIL(results[0].squeeze(0).clamp(-1, 1))
+        result = cv2.cvtColor(np.array(out), cv2.COLOR_RGB2BGR)
+        if factor != 4.0:
+            h, w = bgr.shape[:2]
+            result = cv2.resize(result, (int(w * factor), int(h * factor)), interpolation=cv2.INTER_LANCZOS4)
+        log("[upscale] SUPIR generative upscale")
+        return result
+    except Exception as exc:
+        log(f"[upscale] SUPIR failed: {exc}")
+        return None
+
+
 def _realesrgan(bgr: np.ndarray, factor: float, log: LogFn) -> np.ndarray | None:
     try:
         from .enhance import _RealEsrgan
@@ -153,17 +259,25 @@ def upscale_image(bgr: np.ndarray, factor: float, log: LogFn = _noop) -> Upscale
     target_w, target_h = int(round(w * factor)), int(round(h * factor))
 
     requested = str(settings.upscale_backend).lower()
+    # auto priority: ComfyUI (user workflow) > SUPIR (generative SOTA) >
+    #   HAT (transformer SR, best PSNR) > diffusers > Real-ESRGAN > classical
     order = {
         "comfyui": ["comfyui"],
+        "supir": ["supir"],
+        "hat": ["hat"],
         "diffusers": ["diffusers"],
         "realesrgan": ["realesrgan"],
         "classical": ["classical"],
-    }.get(requested, ["comfyui", "diffusers", "realesrgan", "classical"])
+    }.get(requested, ["comfyui", "supir", "hat", "diffusers", "realesrgan", "classical"])
 
     for backend in order:
         out = None
         if backend == "comfyui":
             out = _comfyui(bgr, factor, target_w, target_h, log)
+        elif backend == "supir":
+            out = _supir(bgr, factor, log)
+        elif backend == "hat":
+            out = _hat(bgr, factor, log)
         elif backend == "diffusers":
             out = _diffusers_tiled(bgr, factor, log)
         elif backend == "realesrgan":

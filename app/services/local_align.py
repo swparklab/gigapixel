@@ -32,8 +32,93 @@ def is_enabled() -> bool:
     return bool(getattr(settings, "stitch_planar_local_align", True))
 
 
+def _flow_raft(ref_gray: np.ndarray, mov_gray: np.ndarray) -> np.ndarray | None:
+    """RAFT (2020, torchvision): recurrent all-pairs field transform.
+
+    State-of-the-art optical flow, available in torchvision >= 0.13.
+    pip install torchvision
+    """
+    try:
+        import torch  # type: ignore
+        from torchvision.models.optical_flow import raft_large, Raft_Large_Weights  # type: ignore
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        model = raft_large(weights=Raft_Large_Weights.DEFAULT).to(device).eval()
+
+        def _to_rgb_tensor(gray: np.ndarray) -> "torch.Tensor":
+            rgb = np.stack([gray, gray, gray], axis=2).astype(np.float32)
+            t = torch.from_numpy(rgb.transpose(2, 0, 1))[None].to(device)
+            return t * 255.0
+
+        t_ref = _to_rgb_tensor(ref_gray)
+        t_mov = _to_rgb_tensor(mov_gray)
+        with torch.inference_mode():
+            flow_list = model(t_ref, t_mov)
+        flow = flow_list[-1].squeeze().permute(1, 2, 0).cpu().numpy()
+        return flow.astype(np.float32)
+    except Exception:
+        return None
+
+
+def _flow_searaft(ref_gray: np.ndarray, mov_gray: np.ndarray) -> np.ndarray | None:
+    """SEA-RAFT (2024): simplified, faster RAFT variant, fewer parameters.
+
+    Achieves RAFT accuracy at ~2x the speed. pip install sea-raft
+    (or: github.com/princeton-vl/SEA-RAFT)
+    """
+    try:
+        import torch  # type: ignore
+        from sea_raft.raft import RAFT as SeaRaft  # type: ignore
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        checkpoint = str(getattr(settings, "searaft_checkpoint", "") or "").strip()
+        model = SeaRaft(mixed_precision=False, iters=12).to(device).eval()
+        if checkpoint:
+            state = torch.load(checkpoint, map_location=device, weights_only=True)
+            model.load_state_dict(state, strict=False)
+
+        def _gray_to_tensor(gray: np.ndarray) -> "torch.Tensor":
+            rgb = np.stack([gray, gray, gray], axis=2).astype(np.float32)
+            return torch.from_numpy(rgb.transpose(2, 0, 1))[None].to(device) * 255.0
+
+        t_ref = _gray_to_tensor(ref_gray)
+        t_mov = _gray_to_tensor(mov_gray)
+        with torch.inference_mode():
+            _, flow = model(t_ref, t_mov, iters=12)
+        return flow.squeeze().permute(1, 2, 0).cpu().numpy().astype(np.float32)
+    except Exception:
+        return None
+
+
 def _dense_flow(ref_gray: np.ndarray, mov_gray: np.ndarray) -> np.ndarray:
-    """Displacement that maps reference coordinates onto the moving image."""
+    """Displacement that maps reference coordinates onto the moving image.
+
+    Backend selection via LOCAL_ALIGN_FLOW_BACKEND:
+      auto      — DISOpticalFlow (default, preserves existing behavior)
+      searaft   — SEA-RAFT (2024) with DIS fallback
+      raft      — RAFT (torchvision) with DIS fallback
+      dis       — DISOpticalFlow (OpenCV, fast classical)
+      farneback — classic Farneback pyramid flow
+
+    Note: 'auto' deliberately stays on DIS to preserve verified behavior.
+    Set LOCAL_ALIGN_FLOW_BACKEND=searaft or raft to opt-in to learned flow.
+    """
+    flow_backend = str(getattr(settings, "local_align_flow_backend", "auto")).lower()
+
+    if flow_backend == "searaft":
+        result = _flow_searaft(ref_gray, mov_gray)
+        if result is not None:
+            return result
+
+    if flow_backend == "raft":
+        result = _flow_raft(ref_gray, mov_gray)
+        if result is not None:
+            return result
+
+    if flow_backend == "farneback":
+        return cv2.calcOpticalFlowFarneback(ref_gray, mov_gray, None, 0.5, 4, 25, 3, 5, 1.2, 0)
+
+    # auto / dis / any unrecognised → DIS (original default behavior)
     try:
         dis = cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_MEDIUM)
         return dis.calc(ref_gray, mov_gray, None)

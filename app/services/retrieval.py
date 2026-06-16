@@ -55,6 +55,57 @@ def _classical_embedding(bgr: np.ndarray) -> np.ndarray:
     return (vector / norm) if norm > 1e-9 else vector
 
 
+class _SigLIPEmbedder:
+    """SigLIP (Google, 2024): superior image-level retrieval vs DINOv2.
+
+    Uses sigmoid loss training that better separates visually similar crops
+    — useful for large heritage sets with repetitive patterns.
+    Model: google/siglip-so400m-patch14-384 (~400M params, ~1.5 GB).
+    pip: pip install transformers (>=4.38)
+    """
+    _model = None
+    _processor = None
+    _failed = False
+    _device = "cpu"
+
+    @classmethod
+    def get(cls):
+        if cls._failed:
+            return None
+        if cls._model is not None:
+            return cls
+        try:
+            import torch  # type: ignore
+            from transformers import AutoProcessor, AutoModel  # type: ignore
+
+            cls._device = "cuda" if torch.cuda.is_available() else "cpu"
+            name = str(getattr(settings, "stitch_retrieval_siglip_model", "google/siglip-so400m-patch14-384"))
+            cls._processor = AutoProcessor.from_pretrained(name)
+            cls._model = AutoModel.from_pretrained(name, torch_dtype=torch.float16 if cls._device == "cuda" else torch.float32).to(cls._device).eval()
+            cls._torch = torch
+            return cls
+        except Exception:
+            cls._failed = True
+            return None
+
+    @classmethod
+    def embed(cls, bgr: np.ndarray) -> np.ndarray | None:
+        if cls.get() is None:
+            return None
+        try:
+            torch = cls._torch
+            rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+            from PIL import Image as _PIL  # type: ignore
+            inputs = cls._processor(images=_PIL.fromarray(rgb), return_tensors="pt").to(cls._device)
+            with torch.inference_mode():
+                out = cls._model.get_image_features(**inputs)
+            vector = out[0].detach().cpu().float().numpy()
+            norm = np.linalg.norm(vector)
+            return (vector / norm) if norm > 1e-9 else vector
+        except Exception:
+            return None
+
+
 class _DinoV2Embedder:
     _model = None
     _processor = None
@@ -114,12 +165,26 @@ class _DinoV2Embedder:
 
 
 def _resolve_backend() -> str:
+    """Select retrieval backend.
+
+    Priority for auto: siglip > dinov2 > classical
+    siglip  — best recall for repetitive heritage patterns (Google 2024, ~1.5 GB)
+    dinov2  — proven, lightweight (85 MB small), well-tested
+    classical — thumbnail color+gradient, no GPU needed
+    """
     requested = str(getattr(settings, "stitch_retrieval_model", "auto")).lower()
     if requested == "classical":
         return "classical"
     if requested == "dinov2":
         return "dinov2"
-    return "dinov2" if _DinoV2Embedder.get() is not None else "classical"
+    if requested == "siglip":
+        return "siglip"
+    # auto: prefer SigLIP, then DINOv2, then classical.
+    if _SigLIPEmbedder.get() is not None:
+        return "siglip"
+    if _DinoV2Embedder.get() is not None:
+        return "dinov2"
+    return "classical"
 
 
 def compute_embeddings(image_paths: list[Path], log: LogFn = _noop) -> tuple[np.ndarray, str]:
@@ -128,14 +193,18 @@ def compute_embeddings(image_paths: list[Path], log: LogFn = _noop) -> tuple[np.
     used = backend
     for path in image_paths:
         bgr = read_image_bgr(path)
-        vector = _DinoV2Embedder.embed(bgr) if backend == "dinov2" else None
+        vector: np.ndarray | None = None
+        if backend == "siglip":
+            vector = _SigLIPEmbedder.embed(bgr)
+        elif backend == "dinov2":
+            vector = _DinoV2Embedder.embed(bgr)
         if vector is None:
             vector = _classical_embedding(bgr)
-            if backend == "dinov2":
+            if backend != "classical":
                 used = "classical"
         vectors.append(vector)
-    # Pad to a common length (classical/dino dims differ only if mixed; we keep
-    # one backend per run, so lengths match).
+    # Pad to a common length (classical/dino/siglip dims differ only if mixed;
+    # we keep one backend per run, so lengths match).
     matrix = np.vstack(vectors)
     log(f"[retrieval] embeddings computed: backend={used}, dim={matrix.shape[1]}")
     return matrix, used

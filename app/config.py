@@ -60,8 +60,11 @@ class Settings(BaseSettings):
     # --- AI / learned feature matching ---------------------------------------
     # Matcher backend: "auto" prefers a learned matcher when torch+kornia are
     # installed and falls back to the classical detector otherwise.
-    #   auto | loftr | disk_lightglue | sift_lightglue | aliked_lightglue
-    #   | classic (force SIFT/ORB)
+    #   auto | roma | loftr | xfeat | disk_lightglue | sift_lightglue
+    #   | aliked_lightglue | classic (force SIFT/ORB)
+    # roma   — SOTA dense matching (2024), best recall on low-texture surfaces
+    # xfeat  — ultra-fast, CPU-friendly (pip install accelerated-features)
+    # loftr  — reliable dense matching via kornia
     stitch_matcher: str = "auto"
     # Compute device for learned matchers: "auto" | "cuda" | "cpu".
     stitch_matcher_device: str = "auto"
@@ -149,10 +152,14 @@ class Settings(BaseSettings):
     # "auto" picks exhaustive for small sets, deep retrieval for large/unordered
     # sets, and the neighbor window otherwise.
     stitch_pair_selection: str = "auto"
-    # Deep global-descriptor backend used for retrieval: auto | dinov2 | classical.
-    # "classical" (thumbnail color+gradient embedding) always works; "dinov2"
-    # upgrades to learned embeddings when torch is available.
+    # Deep global-descriptor backend for overlap retrieval:
+    #   auto | siglip | dinov2 | classical
+    # siglip  — best for heritage repetitive patterns (Google 2024, ~1.5 GB)
+    # dinov2  — lightweight SOTA (Facebook, ~85 MB small variant)
+    # classical — thumbnail color+gradient, no GPU needed
     stitch_retrieval_model: str = "auto"
+    # HuggingFace model ID for SigLIP (only used when stitch_retrieval_model=siglip).
+    stitch_retrieval_siglip_model: str = "google/siglip-so400m-patch14-384"
     # Top-K most-similar neighbours retrieved per image.
     stitch_retrieval_top_k: int = 8
     # In "auto", use retrieval once the set has at least this many images.
@@ -160,18 +167,33 @@ class Settings(BaseSettings):
 
     # --- Learned no-reference image quality (QC) -----------------------------
     stitch_quality_iqa: bool = True
-    # auto | pyiqa | classical. "auto" uses pyiqa (CLIP-IQA) when installed.
+    # auto | qalign | topiq | pyiqa | classical
+    # qalign  — LLM-based IQA, highest human correlation (requires GPU ~7 GB)
+    # topiq   — SOTA transformer IQA via pyiqa (better than CLIP-IQA)
+    # pyiqa   — CLIP-IQA via pyiqa package
+    # classical — heuristic sharpness/contrast/colourfulness
     stitch_quality_iqa_backend: str = "auto"
+    # HuggingFace model for Q-Align (qalign backend).
+    qalign_model: str = "q-future/one-align"
     # Perceptual score (0..1, higher is better) below this adds a warning.
     stitch_quality_iqa_warn: float = 0.30
 
     # --- SAM smart annotation ------------------------------------------------
     sam_enabled: bool = True
-    # auto | sam | classical. "classical" uses GrabCut so click-segmentation
-    # works without model weights; "sam" uses Segment Anything when available.
+    # auto | sam2 | efficient_sam | sam | classical
+    # sam2          — best accuracy (Meta 2024); pip install sam2
+    # efficient_sam — 20x faster than SAM, near-quality (Microsoft 2024)
+    # sam           — original SAM v1
+    # classical     — GrabCut, no model weights required
     sam_backend: str = "auto"
     sam_model_type: str = "vit_h"
-    sam_checkpoint: str = ""  # filesystem path to the SAM checkpoint
+    sam_checkpoint: str = ""  # SAM v1 checkpoint path
+    # SAM2 settings (auto-downloaded from HuggingFace when no checkpoint set).
+    sam2_checkpoint: str = ""
+    sam2_config: str = "sam2_hiera_large.yaml"
+    sam2_hf_model: str = "facebook/sam2-hiera-small"
+    # EfficientSAM settings.
+    efficient_sam_checkpoint: str = ""
     # Max crop (px) sent to the segmenter around the requested region.
     sam_max_region: int = 2048
 
@@ -235,10 +257,26 @@ class Settings(BaseSettings):
     restore_max_dim: int = 0              # 0 = full resolution
 
     # --- Image-to-3D (Gaussian Splatting / point cloud) ----------------------
-    splat_depth_backend: str = "auto"     # auto | depth_anything | midas | relief
+    # Depth estimation backend (priority: depth_pro > marigold > unidepth > depth_anything > midas > relief):
+    #   auto | depth_pro | marigold | unidepth | depth_anything | depth_anything_v2 | midas | relief
+    # depth_pro   — Apple 2024, metric depth, sharpest boundaries (pip install depth-pro)
+    # marigold    — ETH Zurich 2024, diffusion depth, best heritage detail (pip install diffusers)
+    # unidepth    — ETH Zurich 2024, universal metric depth (pip install unidepth)
+    # depth_anything — fast, good quality; Large model used when GPU available
+    splat_depth_backend: str = "auto"
     splat_max_points: int = 1_500_000     # cap on emitted 3D primitives
     splat_depth_strength: float = 0.35    # relief depth amplitude (0..1)
     splat_format: str = "both"            # pointcloud | gaussian | both
+    # Optical flow backend for local alignment:
+    #   auto (default) | dis | searaft | raft | farneback
+    # auto/dis — DISOpticalFlow (OpenCV, default, proven behavior)
+    # searaft  — SEA-RAFT 2024 (pip install sea-raft), faster than RAFT
+    # raft     — RAFT via torchvision (pip install torchvision), SOTA accuracy
+    # Note: 'auto' keeps the existing DIS behavior. Set 'searaft' or 'raft'
+    # to opt-in to learned flow after validating on your capture set.
+    local_align_flow_backend: str = "auto"
+    # SEA-RAFT checkpoint path (optional; auto-uses pretrained weights when empty).
+    searaft_checkpoint: str = ""
 
     # --- Image-to-3D representations (3DGS, mesh, depth, normals) -------------
     # Default artefact built by the /to3d endpoint and the 3D explorer.
@@ -248,6 +286,26 @@ class Settings(BaseSettings):
     # Deep single-image-to-3D object generator when available.
     #   auto | trellis | hunyuan3d | depth (depth = relief surface, always works)
     to3d_backend: str = "depth"
+
+    # --- Multi-view 3D reconstruction backends --------------------------------
+    # auto | noposplat | mvsplat | colmap_gsplat | multiview_depth
+    # noposplat    — ICLR 2025 Oral, no poses, feed-forward, MIT license
+    # mvsplat      — ECCV 2024 Oral, efficient 12M-param feed-forward, MIT license
+    # colmap_gsplat— COLMAP SfM + gsplat training (external tools, GPU required)
+    # multiview_depth — always available, no GPU
+    recon_backend: str = "auto"
+    # NoPoSplat HuggingFace model or checkpoint path.
+    noposplat_checkpoint: str = ""        # empty = auto-download cvg/noposplat-re10k
+    # MVSplat checkpoint path.
+    mvsplat_checkpoint: str = ""
+
+    # --- HAT (Hybrid Attention Transformer) super-resolution checkpoints ------
+    hat_checkpoint_x2: str = ""          # path to Real_HAT_GAN_SRx2.pth
+    hat_checkpoint_x4: str = ""          # path to Real_HAT_GAN_SRx4.pth
+
+    # --- SUPIR generative upscaling -------------------------------------------
+    supir_checkpoint: str = ""           # path to SUPIR-v0Q.ckpt
+    supir_sdxl_checkpoint: str = ""      # optional SDXL base checkpoint
 
     # --- Rights protection / authentication (KOCCA pillar) -------------------
     # Invisible DCT watermark that embeds a per-recipient identifier, plus a

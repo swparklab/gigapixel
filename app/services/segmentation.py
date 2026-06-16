@@ -33,6 +33,7 @@ def _noop(_: str) -> None:
 
 
 class _Sam:
+    """SAM v1 (Meta, 2023): original Segment Anything Model."""
     _predictor = None
     _failed = False
 
@@ -78,17 +79,159 @@ class _Sam:
             return None
 
 
+class _Sam2:
+    """SAM2 (Meta, 2024): 2x better mask accuracy, supports video frames.
+
+    pip install sam2  (or: pip install 'git+https://github.com/facebookresearch/sam2.git')
+    Checkpoints: facebook/sam2-hiera-large (best), facebook/sam2-hiera-small (fast)
+    """
+    _predictor = None
+    _failed = False
+
+    @classmethod
+    def get(cls):
+        if cls._failed:
+            return None
+        if cls._predictor is not None:
+            return cls._predictor
+        try:
+            import torch  # type: ignore
+            from sam2.build_sam import build_sam2  # type: ignore
+            from sam2.sam2_image_predictor import SAM2ImagePredictor  # type: ignore
+
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            checkpoint = str(getattr(settings, "sam2_checkpoint", "") or "").strip()
+            cfg = str(getattr(settings, "sam2_config", "sam2_hiera_large.yaml") or "sam2_hiera_large.yaml")
+            if checkpoint:
+                model = build_sam2(cfg, checkpoint, device=device)
+            else:
+                # Auto-download from HuggingFace.
+                from sam2.build_sam import build_sam2_hf  # type: ignore
+                model_id = str(getattr(settings, "sam2_hf_model", "facebook/sam2-hiera-small") or "facebook/sam2-hiera-small")
+                model = build_sam2_hf(model_id, device=device)
+            cls._predictor = SAM2ImagePredictor(model)
+            return cls._predictor
+        except Exception:
+            cls._failed = True
+            return None
+
+    @classmethod
+    def segment(cls, rgb: np.ndarray, point_xy, box) -> np.ndarray | None:
+        predictor = cls.get()
+        if predictor is None:
+            return None
+        try:
+            import torch  # type: ignore
+            predictor.set_image(rgb)
+            kwargs: dict = {}
+            if point_xy is not None:
+                import numpy as _np
+                kwargs["point_coords"] = _np.array([point_xy], dtype=_np.float32)
+                kwargs["point_labels"] = _np.array([1], dtype=_np.int64)
+            if box is not None:
+                import numpy as _np
+                kwargs["box"] = _np.array(box, dtype=_np.float32)
+            with torch.inference_mode():
+                masks, scores, _ = predictor.predict(multimask_output=True, **kwargs)
+            best = int(np.argmax(scores))
+            return masks[best].astype(np.uint8)
+        except Exception:
+            return None
+
+
+class _EfficientSam:
+    """EfficientSAM (Microsoft, 2024): ~20x faster than SAM, similar quality.
+
+    pip install efficient-sam
+    Or: torch.hub.load("yformer/EfficientSAM", "efficient_sam_vits")
+    Best for interactive use where latency matters.
+    """
+    _model = None
+    _failed = False
+    _device = "cpu"
+
+    @classmethod
+    def get(cls):
+        if cls._failed:
+            return None
+        if cls._model is not None:
+            return cls._model
+        try:
+            import torch  # type: ignore
+            cls._device = "cuda" if torch.cuda.is_available() else "cpu"
+            # Try pip package first, then hub.
+            try:
+                from efficient_sam.build_efficient_sam import build_efficient_sam_vits  # type: ignore
+                checkpoint = str(getattr(settings, "efficient_sam_checkpoint", "") or "").strip()
+                cls._model = build_efficient_sam_vits(checkpoint=checkpoint or None).to(cls._device).eval()
+            except Exception:
+                cls._model = torch.hub.load(
+                    "yformer/EfficientSAM", "efficient_sam_vits", trust_repo=True
+                ).to(cls._device).eval()
+            cls._torch = torch
+            return cls._model
+        except Exception:
+            cls._failed = True
+            return None
+
+    @classmethod
+    def segment(cls, rgb: np.ndarray, point_xy, box) -> np.ndarray | None:
+        model = cls.get()
+        if model is None:
+            return None
+        try:
+            import torch  # type: ignore
+            h, w = rgb.shape[:2]
+            tensor = torch.from_numpy(rgb.astype(np.float32).transpose(2, 0, 1) / 255.0)[None].to(cls._device)
+            if point_xy is not None:
+                pts = torch.tensor([[[point_xy[0], point_xy[1]]]], dtype=torch.float32, device=cls._device)
+                labels = torch.tensor([[1]], dtype=torch.int32, device=cls._device)
+            elif box is not None:
+                x0, y0, x1, y1 = box
+                pts = torch.tensor([[[x0, y0], [x1, y1]]], dtype=torch.float32, device=cls._device)
+                labels = torch.tensor([[2, 3]], dtype=torch.int32, device=cls._device)
+            else:
+                pts = torch.tensor([[[w / 2, h / 2]]], dtype=torch.float32, device=cls._device)
+                labels = torch.tensor([[1]], dtype=torch.int32, device=cls._device)
+            with torch.inference_mode():
+                masks, scores = model(tensor, pts, labels)
+            best = int(scores[0].argmax())
+            mask = masks[0, best].detach().cpu().numpy().astype(np.uint8)
+            return mask
+        except Exception:
+            return None
+
+
 def backend_available() -> bool:
     return bool(getattr(settings, "sam_enabled", True))
 
 
 def _resolve_backend() -> str:
+    """Select segmentation backend.
+
+    Priority for auto: sam2 > efficient_sam > sam > classical
+    sam2          — best accuracy, Meta 2024 (requires checkpoint or HF download)
+    efficient_sam — fast, near-SAM quality (Microsoft 2024, runs on CPU)
+    sam           — original SAM v1
+    classical     — GrabCut, always available
+    """
     requested = str(getattr(settings, "sam_backend", "auto")).lower()
     if requested == "classical":
         return "classical"
     if requested == "sam":
+        return "sam" if _Sam.get() is not None else "classical"
+    if requested == "sam2":
+        return "sam2" if _Sam2.get() is not None else "classical"
+    if requested == "efficient_sam":
+        return "efficient_sam" if _EfficientSam.get() is not None else "classical"
+    # auto
+    if _Sam2.get() is not None:
+        return "sam2"
+    if _EfficientSam.get() is not None:
+        return "efficient_sam"
+    if _Sam.get() is not None:
         return "sam"
-    return "sam" if _Sam.get() is not None else "classical"
+    return "classical"
 
 
 def _grabcut_mask(bgr: np.ndarray, point_xy, box) -> np.ndarray:
@@ -140,8 +283,16 @@ def segment_region(
     """Return (polygon points in crop coords, backend used)."""
     backend = _resolve_backend()
     mask = None
-    if backend == "sam":
-        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+    rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+    if backend == "sam2":
+        mask = _Sam2.segment(rgb, point_xy, box)
+        if mask is None:
+            backend = "classical"
+    elif backend == "efficient_sam":
+        mask = _EfficientSam.segment(rgb, point_xy, box)
+        if mask is None:
+            backend = "classical"
+    elif backend == "sam":
         mask = _Sam.segment(rgb, point_xy, box)
         if mask is None:
             backend = "classical"

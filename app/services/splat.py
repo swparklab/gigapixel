@@ -60,22 +60,109 @@ class _DepthModel:
             import torch  # type: ignore
 
             device = "cuda" if torch.cuda.is_available() else "cpu"
-            # Depth-Anything via transformers pipeline (preferred), else MiDaS hub.
+
+            # --- Depth Pro (Apple, 2024): metric depth, sharp boundaries. ---
+            # pip install depth-pro  (or git clone apple/ml-depth-pro)
+            # Best for heritage surfaces: preserves fine relief detail.
+            if backend in ("auto", "depth_pro"):
+                try:
+                    import depth_pro  # type: ignore
+                    from PIL import Image as _PIL  # type: ignore
+
+                    model, transform = depth_pro.create_model_and_transforms()
+                    model = model.to(device).eval()
+                    cls._name = "depth-pro"
+
+                    def infer_depth_pro(rgb):
+                        img = _PIL.fromarray(rgb)
+                        inp = transform(img)
+                        with torch.inference_mode():
+                            pred = model.infer(inp)
+                        depth = pred["depth"].squeeze().cpu().numpy().astype(np.float32)
+                        return depth
+
+                    cls._infer = infer_depth_pro
+                    return cls._infer
+                except Exception:
+                    pass
+
+            # --- Marigold (ETH Zurich, 2024): diffusion depth, SOTA on heritage. ---
+            # pip install diffusers transformers accelerate
+            # Relative depth but extremely sharp and detail-preserving.
+            if backend in ("auto", "marigold"):
+                try:
+                    from diffusers import MarigoldDepthPipeline  # type: ignore
+
+                    pipe = MarigoldDepthPipeline.from_pretrained(
+                        "prs-eth/marigold-depth-lcm-v1-0",
+                        torch_dtype=torch.float16 if device == "cuda" else torch.float32,
+                        variant="fp16" if device == "cuda" else None,
+                    ).to(device)
+                    cls._name = "marigold"
+
+                    def infer_marigold(rgb):
+                        from PIL import Image as _PIL  # type: ignore
+                        img = _PIL.fromarray(rgb)
+                        with torch.inference_mode():
+                            out = pipe(img, num_inference_steps=4, ensemble_size=5)
+                        depth = out.prediction.squeeze()
+                        return np.asarray(depth, dtype=np.float32)
+
+                    cls._infer = infer_marigold
+                    return cls._infer
+                except Exception:
+                    pass
+
+            # --- UniDepth (ETH Zurich, 2024): metric + universal depth. ---
+            # pip install unidepth  (or huggingface lpiccinelli-eth/unidepth-v2-vitl14)
+            if backend in ("auto", "unidepth"):
+                try:
+                    from unidepth.models import UniDepthV2  # type: ignore
+                    import torch  # type: ignore
+
+                    unidepth_model = UniDepthV2.from_pretrained("lpiccinelli-eth/unidepth-v2-vitl14")
+                    unidepth_model = unidepth_model.to(device).eval()
+                    cls._name = "unidepth-v2"
+
+                    def infer_unidepth(rgb):
+                        import torch as _t  # type: ignore
+                        tensor = _t.from_numpy(rgb.transpose(2, 0, 1).astype(np.float32) / 255.0)[None].to(device)
+                        with _t.inference_mode():
+                            pred = unidepth_model.infer(tensor)
+                        return pred["depth"].squeeze().cpu().numpy().astype(np.float32)
+
+                    cls._infer = infer_unidepth
+                    return cls._infer
+                except Exception:
+                    pass
+
+            # --- Depth-Anything-V2 (2024): fast, good quality. ---
+            # pip install transformers
+            if backend in ("auto", "depth_anything", "depth_anything_v2"):
+                try:
+                    from transformers import pipeline  # type: ignore
+                    from PIL import Image as _PIL  # type: ignore
+
+                    # Use Large model for better quality when GPU available.
+                    model_id = (
+                        "depth-anything/Depth-Anything-V2-Large-hf"
+                        if device == "cuda"
+                        else "depth-anything/Depth-Anything-V2-Small-hf"
+                    )
+                    pipe = pipeline("depth-estimation", model=model_id, device=0 if device == "cuda" else -1)
+                    cls._name = "depth-anything-v2"
+
+                    def infer(rgb):
+                        out = pipe(_PIL.fromarray(rgb))["depth"]
+                        return np.asarray(out, dtype=np.float32)
+
+                    cls._infer = infer
+                    return cls._infer
+                except Exception:
+                    pass
+
+            # --- MiDaS DPT-Hybrid: reliable CPU/GPU fallback. ---
             try:
-                from transformers import pipeline  # type: ignore
-
-                pipe = pipeline("depth-estimation", model="depth-anything/Depth-Anything-V2-Small-hf", device=0 if device == "cuda" else -1)
-                cls._name = "depth-anything-v2"
-
-                def infer(rgb):
-                    from PIL import Image
-
-                    out = pipe(Image.fromarray(rgb))["depth"]
-                    return np.asarray(out, dtype=np.float32)
-
-                cls._infer = infer
-                return cls._infer
-            except Exception:
                 midas = torch.hub.load("intel-isl/MiDaS", "DPT_Hybrid").to(device).eval()
                 transforms = torch.hub.load("intel-isl/MiDaS", "transforms").dpt_transform
                 cls._name = "midas-dpt-hybrid"
@@ -91,6 +178,11 @@ class _DepthModel:
 
                 cls._infer = infer
                 return cls._infer
+            except Exception:
+                pass
+
+            cls._failed = True
+            return None
         except Exception:
             cls._failed = True
             return None

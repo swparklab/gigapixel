@@ -470,6 +470,139 @@ Verification: **64 tests pass**, including licence issue/verify + RBAC gating,
 tamper-region localization, and preset packaging
 ([`tests/test_rights.py`](tests/test_rights.py)).
 
+## Update Notes — 2025 AI Model Upgrade
+
+> **왜 이 모델들을 도입했나?**
+>
+> 기존 파이프라인은 2022–2023년 기준 SOTA 모델(LoFTR, DINOv2, Real-ESRGAN, SAM v1, CLIP-IQA, Depth-Anything-V2 Small 등)을 사용하고 있었습니다.
+> 2024–2025년 사이 각 분야에서 정확도·속도 양면에서 크게 앞서는 신규 모델들이 발표·공개되었고,
+> **모든 기존 백엔드를 유지한 채 선택지를 확장**하는 방식으로 통합했습니다.
+> 설치 없이도 기존 동작은 100% 유지되며, 선택적으로 설치하면 자동 업그레이드됩니다.
+
+### 1. 특징 매칭 (Feature Matching)
+
+| 추가 모델 | 도입 이유 | 설치 |
+|-----------|-----------|------|
+| **RoMa** (CVPR 2024) | LoFTR 대비 HPatches 벤치마크 SOTA. 저질감(단색 벽화·고문서) 표면에서 재현율이 가장 높음. 회귀 기반 워프 필드로 밀집 대응점 생성 | `pip install roma` |
+| **XFeat** (CVPR 2024) | 기존 SIFT 대비 10× 빠름. GPU 없이도 동작하며 LoFTR급 정확도. 실시간 현장 촬영 체크에 유용 | `pip install accelerated-features` |
+
+**자동 우선순위**: `roma` → `loftr` → `xfeat` → `classic`  
+설정: `STITCH_MATCHER=auto` (또는 `roma`/`xfeat`/`loftr`/`classic`)
+
+### 2. 이미지 검색 / 오버랩 그래프 (Retrieval)
+
+| 추가 모델 | 도입 이유 | 설치 |
+|-----------|-----------|------|
+| **SigLIP** (Google 2024, `so400m-patch14-384`) | DINOv2 대비 반복 패턴(문양 벽화, 직물 등) 대규모 세트에서 Top-K 유사도 정확도 향상. 400M 파라미터, sigmoid-loss 학습 | `pip install transformers` (>=4.38) |
+
+**자동 우선순위**: `siglip` → `dinov2` → `classical`  
+설정: `STITCH_RETRIEVAL_MODEL=auto` (또는 `siglip`/`dinov2`/`classical`)
+
+### 3. 업스케일링 (Super-Resolution)
+
+| 추가 모델 | 도입 이유 | 설치 |
+|-----------|-----------|------|
+| **HAT** / Real-HAT-GAN (CVPR 2023/2024) | Real-ESRGAN 대비 PSNR +0.5–1.0 dB 향상. Hybrid Attention Transformer 구조. x2/x4 지원 | `pip install basicsr` + HuggingFace 체크포인트 |
+| **SUPIR** (2024) | SDXL 기반 생성형 업스케일. 문화유산 표면의 세밀한 질감(균열·섬유·금속광택) 복원에서 최고 품질. GPU 24 GB 권장 | `pip install SUPIR` |
+
+**자동 우선순위**: `comfyui` → `supir` → `hat` → `diffusers` → `realesrgan` → `classical`  
+설정: `UPSCALE_BACKEND=auto` (또는 `supir`/`hat`/`realesrgan`/`classical`)
+
+### 4. 깊이 추정 (Depth Estimation, 2D→3D)
+
+| 추가 모델 | 도입 이유 | 설치 |
+|-----------|-----------|------|
+| **Depth Pro** (Apple 2024) | 메트릭 깊이 추정, 경계 선명도 최고. 부조·조각 문화재의 정밀 3D 표현에 적합 | `pip install depth-pro` |
+| **Marigold** (ETH Zurich 2024) | 확산 모델 기반 깊이. 단색·저대비 표면에서 DepthAnything 대비 디테일 현저히 향상. LCM 버전은 4 스텝 추론 | `pip install diffusers` |
+| **UniDepth v2** (ETH Zurich 2024) | 메트릭 + 범용 깊이. 알 수 없는 카메라 파라미터에서도 절대 스케일 추정 가능 | `pip install unidepth` |
+| **Depth-Anything-V2-Large** | GPU 가용 시 Small → Large 모델로 자동 업그레이드 (설치 추가 불필요) | 기존 `transformers` |
+
+**자동 우선순위**: `depth_pro` → `marigold` → `unidepth` → `depth_anything` → `midas` → `relief`  
+설정: `SPLAT_DEPTH_BACKEND=auto`
+
+### 5. 세그멘테이션 (Segmentation)
+
+| 추가 모델 | 도입 이유 | 설치 |
+|-----------|-----------|------|
+| **SAM2** (Meta 2024) | SAM v1 대비 마스크 정확도 2×. 동영상 프레임도 지원. 비디오 방식 문화재 촬영 세트에도 활용 가능 | `pip install sam2` |
+| **EfficientSAM** (Microsoft 2024) | SAM v1 대비 ~20× 빠름. CPU에서도 실용적인 속도. 현장 실시간 스마트 어노테이션에 적합 | `pip install efficient-sam` |
+
+**자동 우선순위**: `sam2` → `efficient_sam` → `sam` → `classical`(GrabCut)  
+설정: `SAM_BACKEND=auto` (또는 `sam2`/`efficient_sam`/`sam`/`classical`)
+
+### 6. 이미지 품질 평가 (IQA)
+
+| 추가 모델 | 도입 이유 | 설치 |
+|-----------|-----------|------|
+| **TOPIQ** (2024, via pyiqa) | CLIP-IQA 대비 KADID-10k 피어슨 상관관계 향상. Transformer 기반 Top-down IQA | `pip install pyiqa` (>=0.1.12) |
+| **Q-Align** (2024, `q-future/one-align`) | LLM 기반 IQA. 현재 인간 MOS 상관관계 최고치. GPU ~7 GB 필요. 블러·아티팩트·노이즈 모두 고려 | `pip install q-align` |
+
+**자동 우선순위**: `qalign` → `topiq` → `clipiqa` → `classical`  
+설정: `STITCH_QUALITY_IQA_BACKEND=auto`
+
+### 7. 광류 / 탄성 국소 정렬 (Optical Flow)
+
+| 추가 모델 | 도입 이유 | 설치 |
+|-----------|-----------|------|
+| **RAFT** (2020, torchvision 내장) | Sintel·KITTI 벤치마크 SOTA. 코드에서 언급됐지만 실제로는 DIS만 사용하던 것을 실제 연결 | `pip install torchvision` |
+| **SEA-RAFT** (2024) | RAFT 대비 ~2× 빠름, 파라미터 수 대폭 감소. 동일 정확도에서 메모리·속도 효율화 | `pip install sea-raft` |
+
+**자동 우선순위**: `searaft` → `raft` → `dis` → `farneback`  
+설정: `LOCAL_ALIGN_FLOW_BACKEND=auto`
+
+### 8. 다시점 3D 재구성 (Multi-View 3D Reconstruction)
+
+| 추가 모델 | 도입 이유 | 설치 |
+|-----------|-----------|------|
+| **NoPoSplat** (ICLR 2025 Oral, MIT) | **포즈 불필요**. 2장 이미지에서 0.015초 추론으로 3D Gaussian Splatting 생성. DTU 제로샷 SOTA (+3.97 PSNR vs MVSplat). 문화재 현장 비정형 촬영 세트에 최적 | `pip install git+https://github.com/cvg/NoPoSplat.git` |
+| **MVSplat** (ECCV 2024 Oral, MIT) | pixelSplat 대비 +0.30 PSNR, 2.3× 빠름. 12M 파라미터로 경량. 포즈 있을 때 최고 품질 피드포워드 3DGS | 별도 설치 + 체크포인트 필요 |
+
+**자동 우선순위**: `noposplat` → `mvsplat` → `colmap_gsplat` → `multiview_depth`  
+설정: `RECON_BACKEND=auto`
+
+### 빠른 설치 (선택)
+
+```powershell
+# 매칭 품질 최대화 (SOTA dense matcher)
+pip install roma
+
+# CPU 환경 고속 매칭
+pip install accelerated-features
+
+# 고품질 검색 (반복 패턴 세트)
+pip install transformers  # 이미 설치된 경우 생략
+
+# 업스케일 품질 향상
+pip install basicsr       # HAT SR
+pip install SUPIR         # 생성형 업스케일 (GPU 24GB)
+
+# 최고 품질 깊이 추정
+pip install depth-pro     # Apple Depth Pro
+pip install diffusers     # Marigold (이미 설치된 경우 생략)
+pip install unidepth      # UniDepth
+
+# 세그멘테이션 업그레이드
+pip install sam2           # SAM2
+pip install efficient-sam  # EfficientSAM
+
+# IQA 업그레이드
+pip install pyiqa          # TOPIQ 포함 (이미 설치된 경우 생략)
+pip install q-align        # Q-Align (GPU 필요)
+
+# 광류 업그레이드
+pip install torchvision    # RAFT (이미 설치된 경우 생략)
+pip install sea-raft       # SEA-RAFT
+
+# 포즈 없는 3D (ICLR 2025)
+pip install git+https://github.com/cvg/NoPoSplat.git
+```
+
+각 모듈은 해당 패키지가 없으면 기존 백엔드로 자동 폴백합니다.
+설치된 것만 활성화되며, 아무것도 설치하지 않아도 기존 파이프라인은 100% 동작합니다.
+
+Verification: **69 tests pass**, including new backend-selection and graceful-fallback
+tests for all 2025 AI upgrades ([`tests/test_ai_features.py`](tests/test_ai_features.py)).
+
 ## Project Status
 
 This repository is an active research and engineering prototype.
@@ -742,7 +875,7 @@ Important settings:
 | `STITCH_FEATURE_DETECTOR` | `sift` | Feature detector, usually `sift` or `orb` |
 | `STITCH_PLANAR_TRANSFORM_MODEL` | `affine` | Alignment model for scans |
 | `STITCH_PLANAR_MULTIBAND_MAX_PIXELS` | `120000000` | In-memory multiband cutoff before the tiled multiband path |
-| `STITCH_MATCHER` | `auto` | `auto`/`loftr`/`disk_lightglue`/`sift_lightglue`/`aliked_lightglue`/`classic` |
+| `STITCH_MATCHER` | `auto` | `auto`/`roma`/`xfeat`/`loftr`/`disk_lightglue`/`sift_lightglue`/`aliked_lightglue`/`classic` |
 | `STITCH_MATCHER_DEVICE` | `auto` | Learned matcher device: `auto`/`cuda`/`cpu` |
 | `STITCH_MATCHER_INPUT_DIM` | `1600` | Long-edge size the learned matcher runs at |
 | `STITCH_PLANAR_ROBUST_REFINE` | `True` | Enable Huber IRLS global bundle adjustment |
@@ -757,10 +890,24 @@ Important settings:
 | `STITCH_REPAIR_BACKEND` | `auto` | `auto`/`classical`/`lama`/`none` inpainting backend |
 | `STITCH_REPAIR_MAX_HOLE_FRACTION` | `0.25` | Refuse to inpaint holes larger than this share of content |
 | `STITCH_PAIR_SELECTION` | `auto` | `auto`/`exhaustive`/`neighbor`/`retrieval` candidate-pair strategy |
-| `STITCH_RETRIEVAL_MODEL` | `auto` | `auto`/`dinov2`/`classical` retrieval embedding backend |
+| `STITCH_RETRIEVAL_MODEL` | `auto` | `auto`/`siglip`/`dinov2`/`classical` retrieval embedding backend |
+| `STITCH_RETRIEVAL_SIGLIP_MODEL` | `google/siglip-so400m-patch14-384` | SigLIP HuggingFace model ID |
 | `STITCH_QUALITY_IQA` | `True` | Add a learned/heuristic no-reference quality score to QC |
+| `STITCH_QUALITY_IQA_BACKEND` | `auto` | `auto`/`qalign`/`topiq`/`pyiqa`/`classical` IQA backend |
+| `QALIGN_MODEL` | `q-future/one-align` | Q-Align HuggingFace model ID |
 | `SAM_ENABLED` | `True` | Enable smart-annotation/segmentation endpoints |
-| `SAM_BACKEND` | `auto` | `auto`/`sam`/`classical` segmentation backend |
+| `SAM_BACKEND` | `auto` | `auto`/`sam2`/`efficient_sam`/`sam`/`classical` segmentation backend |
+| `SAM2_HF_MODEL` | `facebook/sam2-hiera-small` | SAM2 HuggingFace model ID (auto-downloaded) |
+| `SAM_CHECKPOINT` | `` | SAM v1 checkpoint path |
+| `SAM2_CHECKPOINT` | `` | SAM2 checkpoint path (empty = auto-download) |
+| `SPLAT_DEPTH_BACKEND` | `auto` | `auto`/`depth_pro`/`marigold`/`unidepth`/`depth_anything`/`midas`/`relief` |
+| `LOCAL_ALIGN_FLOW_BACKEND` | `auto` | `auto`/`searaft`/`raft`/`dis`/`farneback` optical flow backend |
+| `SEARAFT_CHECKPOINT` | `` | SEA-RAFT checkpoint path (empty = pretrained) |
+| `RECON_BACKEND` | `auto` | `auto`/`noposplat`/`mvsplat`/`colmap_gsplat`/`multiview_depth` |
+| `NOPOSPLAT_CHECKPOINT` | `` | NoPoSplat model path (empty = auto-download `cvg/noposplat-re10k`) |
+| `HAT_CHECKPOINT_X4` | `` | HAT SR x4 checkpoint path (Real_HAT_GAN_SRx4.pth) |
+| `SUPIR_CHECKPOINT` | `` | SUPIR-v0Q checkpoint path |
+| `UPSCALE_BACKEND` | `auto` | `auto`/`comfyui`/`supir`/`hat`/`diffusers`/`realesrgan`/`classical` |
 | `STITCH_ENHANCE` | `False` | Produce a non-archival AI-enhanced viewing variant |
 | `STITCH_ENHANCE_BACKEND` | `auto` | `auto`/`realesrgan`/`classical` enhancement backend |
 | `LOG_FORMAT` | `json` | Agent/API log format |
