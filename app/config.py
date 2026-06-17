@@ -294,6 +294,7 @@ class Settings(BaseSettings):
     # colmap_gsplat— COLMAP SfM + gsplat training (external tools, GPU required)
     # multiview_depth — always available, no GPU
     recon_backend: str = "auto"
+    recon_max_images: int = 200
     # NoPoSplat HuggingFace model or checkpoint path.
     noposplat_checkpoint: str = ""        # empty = auto-download cvg/noposplat-re10k
     # MVSplat checkpoint path.
@@ -335,10 +336,6 @@ class Settings(BaseSettings):
     job_heartbeat_seconds: int = 15       # worker heartbeat cadence
     job_max_attempts: int = 3             # retry budget per job
     job_stale_recovery: bool = True       # requeue stale jobs automatically
-
-    # --- Multi-view 3D reconstruction ----------------------------------------
-    recon_backend: str = "auto"           # auto | colmap_gsplat | multiview_depth
-    recon_max_images: int = 200
 
     # --- Corpus semantic search / auto-tagging -------------------------------
     semantic_backend: str = "auto"        # auto | clip | classical

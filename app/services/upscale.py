@@ -50,20 +50,35 @@ def _classical(bgr: np.ndarray, factor: float, log: LogFn) -> np.ndarray:
 
 
 def _hat(bgr: np.ndarray, factor: float, log: LogFn) -> np.ndarray | None:
-    """HAT (Hybrid Attention Transformer, 2023/2024) super-resolution.
+    """HAT / SwinIR transformer super-resolution.
 
-    Outperforms Real-ESRGAN on PSNR/SSIM benchmarks for photographic content.
-    Supports x2/x4 scale. Requires ``basicsr`` and HAT checkpoint from HuggingFace
-    (XPixelGroup/HAT-L_SRx4_ImageNet-pretrain or Real_HAT_GAN_SRx4).
+    Tries in order:
+    1. HAT (XPixelGroup fork of basicsr) — highest PSNR, pip install git+XPixelGroup/HAT
+    2. SwinIR (mainline basicsr swinir_arch) — strong Swin-Transformer SR, same pip
+    Both outperform Real-ESRGAN on PSNR/SSIM for photographic content.
     pip install basicsr
     """
     try:
         import torch  # type: ignore
-        from basicsr.archs.hat_arch import HAT as HATModel  # type: ignore
-        from basicsr.utils import img2tensor, tensor2img  # type: ignore
-        import yaml  # type: ignore
         from pathlib import Path as _Path
     except Exception:
+        return None
+
+    # Try HAT (XPixelGroup fork) first, fall back to SwinIR (mainline basicsr).
+    HATModel = None
+    try:
+        from basicsr.archs.hat_arch import HAT as HATModel  # type: ignore
+    except Exception:
+        pass
+
+    SwinIRModel = None
+    if HATModel is None:
+        try:
+            from basicsr.archs.swinir_arch import SwinIR as SwinIRModel  # type: ignore
+        except Exception:
+            pass
+
+    if HATModel is None and SwinIRModel is None:
         return None
     try:
         scale = int(round(factor))
@@ -71,33 +86,36 @@ def _hat(bgr: np.ndarray, factor: float, log: LogFn) -> np.ndarray | None:
             return None
         checkpoint_path = str(getattr(settings, f"hat_checkpoint_x{scale}", "") or "").strip()
         if not checkpoint_path or not _Path(checkpoint_path).exists():
-            # Try HuggingFace hub download if huggingface_hub is available.
             try:
                 from huggingface_hub import hf_hub_download  # type: ignore
-                repo = "XPixelGroup/HAT"
-                filename = f"Real_HAT_GAN_SRx{scale}.pth"
-                checkpoint_path = hf_hub_download(repo_id=repo, filename=f"experiments/pretrained_models/{filename}")
+                if HATModel is not None:
+                    repo, fname = "XPixelGroup/HAT", f"experiments/pretrained_models/Real_HAT_GAN_SRx{scale}.pth"
+                else:
+                    repo, fname = "JingyunLiang/SwinIR", f"model_zoo/swinir/003_realSR_BSRGAN_DFOWMFC_s64w8_SwinIR-L_x{scale}_GAN.pth"
+                checkpoint_path = hf_hub_download(repo_id=repo, filename=fname)
             except Exception:
                 return None
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        model = HATModel(
-            upscale=scale,
-            in_chans=3,
-            img_size=64,
-            window_size=16,
-            compress_ratio=3,
-            squeeze_factor=30,
-            conv_scale=0.01,
-            overlap_ratio=0.5,
-            img_range=1.0,
-            depths=[6, 6, 6, 6, 6, 6],
-            embed_dim=180,
-            num_heads=[6, 6, 6, 6, 6, 6],
-            mlp_ratio=2,
-            upsampler="pixelshuffle",
-            resi_connection="1conv",
-        ).to(device).eval()
+        if HATModel is not None:
+            model = HATModel(
+                upscale=scale, in_chans=3, img_size=64, window_size=16,
+                compress_ratio=3, squeeze_factor=30, conv_scale=0.01,
+                overlap_ratio=0.5, img_range=1.0,
+                depths=[6, 6, 6, 6, 6, 6], embed_dim=180,
+                num_heads=[6, 6, 6, 6, 6, 6], mlp_ratio=2,
+                upsampler="pixelshuffle", resi_connection="1conv",
+            ).to(device).eval()
+            arch_name = "HAT"
+        else:
+            model = SwinIRModel(
+                upscale=scale, in_chans=3, img_size=64, window_size=8,
+                img_range=1.0, depths=[6, 6, 6, 6, 6, 6, 6, 6, 6], embed_dim=240,
+                num_heads=[8, 8, 8, 8, 8, 8, 8, 8, 8], mlp_ratio=2,
+                upsampler="nearest+conv", resi_connection="3conv",
+            ).to(device).eval()
+            arch_name = "SwinIR"
+
         state = torch.load(checkpoint_path, map_location=device, weights_only=True)
         model.load_state_dict(state.get("params_ema", state.get("params", state)), strict=False)
 
@@ -106,10 +124,10 @@ def _hat(bgr: np.ndarray, factor: float, log: LogFn) -> np.ndarray | None:
         with torch.inference_mode():
             out = model(tensor).squeeze(0).clamp(0, 1).cpu().numpy()
         result = cv2.cvtColor((out.transpose(1, 2, 0) * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
-        log(f"[upscale] HAT x{scale}")
+        log(f"[upscale] {arch_name} x{scale}")
         return result
     except Exception as exc:
-        log(f"[upscale] HAT failed: {exc}")
+        log(f"[upscale] HAT/SwinIR failed: {exc}")
         return None
 
 

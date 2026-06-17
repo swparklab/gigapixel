@@ -82,7 +82,7 @@ def test_segment_region_returns_polygon_for_object():
     cv2.circle(img, (200, 200), 90, (200, 180, 160), -1)
     img = cv2.add(img, np.random.default_rng(0).integers(0, 18, (400, 400, 3), dtype=np.uint8).astype(np.uint8))
     polygon, backend = segment_region(img, point_xy=(200, 200))
-    assert backend in {"classical", "sam"}
+    assert backend in {"classical", "sam", "sam2", "efficient_sam"}
     assert len(polygon) >= 3
 
 
