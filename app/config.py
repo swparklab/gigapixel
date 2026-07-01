@@ -300,6 +300,40 @@ class Settings(BaseSettings):
     # MVSplat checkpoint path.
     mvsplat_checkpoint: str = ""
 
+    # --- Point cloud -> 3D object mesh (neural surface reconstruction) --------
+    # Turns the merged gigapixel point cloud into a watertight, textured 3D
+    # object model (mesh) that opens in Blender / Unity / <model-viewer>.
+    #   auto | nksr | poisson | bpa | grid | none
+    # nksr    — NVIDIA Neural Kernel Surface Reconstruction, latest learned
+    #           point-cloud->mesh model (CUDA torch + `pip install nksr`).
+    # poisson — Open3D screened Poisson w/ density trimming (CPU, watertight).
+    # bpa     — Open3D ball pivoting (keeps open relief surfaces).
+    # grid    — pure-NumPy PCA height-field mesher, always available.
+    mesh_recon_enabled: bool = True
+    mesh_recon_backend: str = "auto"
+    # Screened-Poisson octree depth (higher = finer detail, slower/heavier).
+    mesh_poisson_depth: int = 9
+    # Trim vertices below this Poisson-density quantile (removes bubble artefacts).
+    mesh_poisson_density_quantile: float = 0.04
+    # Quadric-decimation cap on the emitted mesh (0 = keep full resolution).
+    mesh_target_faces: int = 400_000
+    # Voxel-downsample the cloud to at most this many points before meshing so
+    # CPU Poisson/normal-estimation stay fast on gigapixel clouds (0 = no cap).
+    mesh_max_input_points: int = 500_000
+    # --- Precision: point-cloud cleaning + oriented normals -------------------
+    mesh_outlier_removal: bool = True
+    mesh_outlier_neighbors: int = 24
+    mesh_outlier_std_ratio: float = 2.0
+    mesh_normal_k: int = 30
+    # Normals are oriented to face this view direction (fast, O(N)). Heritage
+    # captures are single-sided 2.5D surfaces, so +Z (toward the camera) is right.
+    mesh_normal_orient: tuple[float, float, float] = (0.0, 0.0, 1.0)
+    # NumPy fallback height-field mesh grid resolution (verts per side).
+    mesh_grid_resolution: int = 220
+    # NKSR checkpoint (empty = the model's default) + dual-mesh refinement iters.
+    nksr_checkpoint: str = ""
+    nksr_mise_iter: int = 1
+
     # --- HAT (Hybrid Attention Transformer) super-resolution checkpoints ------
     hat_checkpoint_x2: str = ""          # path to Real_HAT_GAN_SRx2.pth
     hat_checkpoint_x4: str = ""          # path to Real_HAT_GAN_SRx4.pth

@@ -415,7 +415,7 @@ def build_3d(bgr: np.ndarray, representation: str, output_base: Path, log: LogFn
     Returns {"representation", "depth_backend", "artifacts": {name: Path}, ...}.
     """
     representation = (representation or settings.to3d_default_representation).lower()
-    wants = {"splat", "pointcloud", "gaussian", "mesh", "depth", "normals", "material"}
+    wants = {"splat", "pointcloud", "gaussian", "mesh", "object", "depth", "normals", "material"}
     selected = wants if representation == "all" else {representation}
     artifacts: dict[str, Path] = {}
 
@@ -445,6 +445,16 @@ def build_3d(bgr: np.ndarray, representation: str, output_base: Path, log: LogFn
         artifacts.setdefault("gaussian", gp)
     if "mesh" in selected and (deep is None or "mesh_glb" not in deep):
         artifacts.update(write_relief_mesh(bgr, depth, output_base, log))
+    if "object" in selected:
+        # Point-cloud -> watertight 3D object mesh (neural surface reconstruction).
+        try:
+            from .mesh_recon import point_cloud_to_mesh
+
+            mesh = point_cloud_to_mesh(points, colors, output_base, log=log, stem="object_mesh")
+            for key, path in mesh.artifacts.items():
+                artifacts[key.replace("mesh_", "object_")] = path
+        except Exception as exc:  # pragma: no cover - best-effort
+            log(f"[3d] object mesh reconstruction skipped ({exc})")
     if "depth" in selected:
         p = output_base / "depth.png"
         cv2.imencode(".png", (np.clip(depth, 0, 1) * 255).astype(np.uint8))[1].tofile(str(p))

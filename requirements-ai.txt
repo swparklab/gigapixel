@@ -15,3 +15,10 @@
 torch>=2.2.0
 kornia>=0.7.3
 kornia-rs>=0.1.1
+
+# Neural point-cloud -> 3D object mesh (highest quality, GPU only). NKSR is
+# NVIDIA's Neural Kernel Surface Reconstruction — the SOTA learned surface
+# reconstructor. Install AFTER a CUDA torch build. Without it, the pipeline
+# uses Open3D screened-Poisson (see requirements.txt), which needs no GPU.
+#   pip install nksr -f https://nksr.huyaoyu.com/whl/torch-2.2.0+cu121.html
+# nksr>=1.0.3

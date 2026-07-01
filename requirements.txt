@@ -27,8 +27,12 @@ kornia-rs>=0.1.1
 # lensfunpy>=1.14.0
 # Optional (AES-256-GCM encrypted archival packaging):
 # cryptography>=42.0.0
-# Optional (textured GLB mesh export for image-to-3D):
-# trimesh>=4.0.0
+# Point cloud -> watertight 3D object mesh (surface reconstruction) + GLB export.
+# Open3D provides screened-Poisson / ball-pivoting meshing, statistical outlier
+# removal and oriented-normal estimation on CPU; trimesh writes the textured GLB.
+# When both are absent a pure-NumPy PCA height-field mesher is used instead.
+open3d>=0.18.0
+trimesh>=4.0.0
 # Optional (LaMa deep inpainting for repairing large/structured holes;
 # classical inpainting is used automatically when this is absent):
 # simple-lama-inpainting>=0.1.2

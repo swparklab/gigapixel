@@ -278,10 +278,18 @@ access control.
    automatic **stale-job recovery** (requeue within the retry budget, else
    fail), attempt counting, and `GET …/queue` position reporting. Schema evolves
    via an additive in-place migration ([`database.py`](app/database.py)).
-2. **Multi-view 3D reconstruction** ([`recon3d.py`](app/services/recon3d.py),
-   `POST …/reconstruct3d`). Fuses **all** registered views into one point cloud
-   / Gaussian PLY (real COLMAP + gsplat pipeline when installed; depth-fusion
-   fallback otherwise), viewable in the same 3D explorer.
+2. **Multi-view 3D reconstruction → 3D object model**
+   ([`recon3d.py`](app/services/recon3d.py),
+   [`mesh_recon.py`](app/services/mesh_recon.py), `POST …/reconstruct3d`). Fuses
+   **all** registered views into one merged-gigapixel point cloud / Gaussian PLY
+   (real COLMAP + gsplat pipeline when installed; precision depth-fusion fallback
+   otherwise), then reconstructs a **watertight, textured 3D object mesh**
+   (`.glb`/`.ply`/`.obj`) from that cloud via neural surface reconstruction —
+   NVIDIA **NKSR** on a GPU, else Open3D **screened-Poisson** / ball-pivoting on
+   CPU, else a pure-NumPy height-field mesher. Fusion precision is raised with
+   voxel-centroid + mean-colour averaging, statistical outlier removal and
+   oriented normals. All viewable in the same 3D explorer (`representation=object`
+   on `/to3d` builds an object mesh from a single mosaic too).
 3. **Corpus semantic search + auto-tagging**
    ([`semantic.py`](app/services/semantic.py), `POST …/tags`, `GET /api/search`).
    Zero-shot CLIP tags and text/image search across ready sessions, with a
@@ -905,6 +913,13 @@ Important settings:
 | `SEARAFT_CHECKPOINT` | `` | SEA-RAFT checkpoint path (empty = pretrained) |
 | `RECON_BACKEND` | `auto` | `auto`/`noposplat`/`mvsplat`/`colmap_gsplat`/`multiview_depth` |
 | `NOPOSPLAT_CHECKPOINT` | `` | NoPoSplat model path (empty = auto-download `cvg/noposplat-re10k`) |
+| `MESH_RECON_ENABLED` | `True` | Reconstruct a 3D object mesh from the point cloud after fusion |
+| `MESH_RECON_BACKEND` | `auto` | `auto`/`nksr`/`poisson`/`bpa`/`grid`/`none` point-cloud→mesh backend |
+| `MESH_POISSON_DEPTH` | `9` | Screened-Poisson octree depth (higher = finer/slower) |
+| `MESH_TARGET_FACES` | `400000` | Quadric-decimation cap on the emitted mesh (0 = uncapped) |
+| `MESH_MAX_INPUT_POINTS` | `500000` | Voxel-downsample cap fed to CPU meshing (0 = uncapped) |
+| `MESH_OUTLIER_REMOVAL` | `True` | Statistical outlier removal before meshing (precision) |
+| `NKSR_CHECKPOINT` | `` | NKSR model path (empty = model default; needs CUDA torch + `nksr`) |
 | `HAT_CHECKPOINT_X4` | `` | HAT SR x4 checkpoint path (Real_HAT_GAN_SRx4.pth) |
 | `SUPIR_CHECKPOINT` | `` | SUPIR-v0Q checkpoint path |
 | `UPSCALE_BACKEND` | `auto` | `auto`/`comfyui`/`supir`/`hat`/`diffusers`/`realesrgan`/`classical` |

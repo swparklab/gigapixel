@@ -1458,6 +1458,10 @@ def reconstruct3d_endpoint(session_id: str, db: Session = Depends(get_db)):
         _shutil.copyfile(result.pointcloud_path, base / "pointcloud.ply")
     if result.gaussian_path:
         _shutil.copyfile(result.gaussian_path, base / "gaussians.ply")
+    mesh_url = None
+    if result.mesh_path and Path(result.mesh_path).exists():
+        mesh_name = Path(result.mesh_path).name
+        mesh_url = f"{settings.api_prefix}/sessions/{session_id}/3d/{mesh_name}"
     api = settings.api_prefix
     return ReconResponse(
         ok=True,
@@ -1465,6 +1469,9 @@ def reconstruct3d_endpoint(session_id: str, db: Session = Depends(get_db)):
         num_points=result.num_points,
         pointcloud_url=f"{api}/sessions/{session_id}/pointcloud.ply" if result.pointcloud_path else None,
         gaussian_url=f"{api}/sessions/{session_id}/gaussians.ply" if result.gaussian_path else None,
+        mesh_url=mesh_url,
+        mesh_backend=result.mesh_backend,
+        num_faces=result.num_faces,
         explorer_url=f"/viewer3d/{session_id}",
         note=result.note,
     )

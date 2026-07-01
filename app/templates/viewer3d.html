@@ -57,6 +57,7 @@
     <div class="panelbox" style="display:flex;gap:8px;align-items:center">
       <select id="repSel">
         <option value="splat">3D Gaussian Splatting</option>
+        <option value="object">3D object model (point cloud → mesh)</option>
         <option value="mesh">Relief mesh (3D)</option>
         <option value="all">All representations</option>
       </select>
@@ -122,8 +123,10 @@
 
     function renderLinks(map) {
       downloads.innerHTML = "";
-      const order = [["splat", ".splat"], ["gaussian", "gaussian.ply"], ["mesh_glb", "mesh.glb"],
-                     ["mesh_obj", "mesh.obj"], ["pointcloud", "pointcloud.ply"], ["depth", "depth"], ["normals", "normals"]];
+      const order = [["splat", ".splat"], ["gaussian", "gaussian.ply"],
+                     ["object_glb", "object.glb"], ["object_ply", "object.ply"], ["object_obj", "object.obj"],
+                     ["mesh_glb", "mesh.glb"], ["mesh_obj", "mesh.obj"],
+                     ["pointcloud", "pointcloud.ply"], ["depth", "depth"], ["normals", "normals"]];
       order.forEach(([k, label]) => {
         if (map[k]) {
           const a = document.createElement("a");
@@ -142,9 +145,12 @@
       const data = await res.json();
       renderLinks(data.artifacts || {});
       setStatus(`Built ${data.num_points.toLocaleString()} primitives (depth: ${data.depth_backend}).`);
-      if (data.artifacts.mesh_glb && representation === "mesh") showMesh(data.artifacts.mesh_glb);
-      else if (data.artifacts.gaussian) await showSplats(data.artifacts.gaussian);
-      else if (data.artifacts.splat) await showSplats(data.artifacts.splat);
+      const art = data.artifacts || {};
+      if (representation === "object" && (art.object_glb || art.object_ply)) showMesh(art.object_glb || art.object_ply);
+      else if (representation === "mesh" && art.mesh_glb) showMesh(art.mesh_glb);
+      else if (art.gaussian) await showSplats(art.gaussian);
+      else if (art.splat) await showSplats(art.splat);
+      else if (art.object_glb || art.mesh_glb) showMesh(art.object_glb || art.mesh_glb);
     }
 
     document.getElementById("buildBtn").addEventListener("click", () =>

@@ -195,6 +195,9 @@ class ReconResponse(BaseModel):
     num_points: int
     pointcloud_url: str | None = None
     gaussian_url: str | None = None
+    mesh_url: str | None = None
+    mesh_backend: str = ""
+    num_faces: int = 0
     explorer_url: str
     note: str = ""
 
@@ -258,7 +261,7 @@ class UpscaleResponse(BaseModel):
 
 class To3DRequest(BaseModel):
     representation: str = Field(
-        default="splat", pattern="^(splat|pointcloud|gaussian|mesh|depth|normals|material|all)$"
+        default="splat", pattern="^(splat|pointcloud|gaussian|mesh|object|depth|normals|material|all)$"
     )
 
 

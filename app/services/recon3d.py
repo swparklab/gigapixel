@@ -41,6 +41,9 @@ class ReconResult:
     pointcloud_path: Path | None
     gaussian_path: Path | None
     note: str = ""
+    mesh_path: Path | None = None
+    mesh_backend: str = ""
+    num_faces: int = 0
 
 
 def _colmap_available() -> bool:
@@ -55,18 +58,35 @@ def _colmap_available() -> bool:
 
 
 def _voxel_downsample(points: np.ndarray, colors: np.ndarray, max_points: int):
+    """Voxel-average downsample.
+
+    Rather than keeping one arbitrary point per voxel, this returns the voxel
+    *centroid* position and *mean* colour. Averaging cancels per-view depth
+    jitter, so the fused cloud is measurably more precise (sub-voxel accurate)
+    than nearest-point decimation.
+    """
     if len(points) <= max_points:
         return points, colors
     lo = points.min(axis=0)
     span = np.maximum(points.max(axis=0) - lo, 1e-6)
     # Choose a voxel grid that yields roughly max_points cells.
     res = max(8, int(round(max_points ** (1 / 3))))
-    quant = np.floor((points - lo) / span * res).astype(np.int64)
+    quant = np.clip(np.floor((points - lo) / span * res).astype(np.int64), 0, res)
     keys = quant[:, 0] * (res + 1) ** 2 + quant[:, 1] * (res + 1) + quant[:, 2]
-    _, idx = np.unique(keys, return_index=True)
-    if len(idx) > max_points:
-        idx = idx[np.linspace(0, len(idx) - 1, max_points).astype(np.int64)]
-    return points[idx], colors[idx]
+    uniq, inverse = np.unique(keys, return_inverse=True)
+    n = len(uniq)
+    pos_sum = np.zeros((n, 3), np.float64)
+    col_sum = np.zeros((n, 3), np.float64)
+    count = np.zeros(n, np.float64)
+    np.add.at(pos_sum, inverse, points.astype(np.float64))
+    np.add.at(col_sum, inverse, colors.astype(np.float64))
+    np.add.at(count, inverse, 1.0)
+    out_pts = (pos_sum / count[:, None]).astype(np.float32)
+    out_col = np.clip(col_sum / count[:, None], 0, 255).astype(np.uint8)
+    if len(out_pts) > max_points:
+        idx = np.linspace(0, len(out_pts) - 1, max_points).astype(np.int64)
+        out_pts, out_col = out_pts[idx], out_col[idx]
+    return out_pts, out_col
 
 
 def _multiview_depth_fusion(image_paths: list[Path], output_base: Path, log: LogFn) -> ReconResult:
@@ -109,8 +129,28 @@ def _multiview_depth_fusion(image_paths: list[Path], output_base: Path, log: Log
     write_pointcloud_ply(points, colors, pc_path)
     write_gaussian_ply(points, colors, gs_path)
     log(f"[recon] multiview fusion: {len(points)} fused points from {len(image_paths)} views")
-    return ReconResult("multiview_depth", len(points), pc_path, gs_path,
-                       note=f"Fused {len(image_paths)} registered views (no GPU required).")
+    result = ReconResult("multiview_depth", len(points), pc_path, gs_path,
+                         note=f"Fused {len(image_paths)} registered views (no GPU required).")
+    _attach_object_mesh(result, points, colors, output_base, log)
+    return result
+
+
+def _attach_object_mesh(result: ReconResult, points: np.ndarray, colors: np.ndarray,
+                        output_base: Path, log: LogFn) -> None:
+    """Reconstruct a watertight 3D object mesh from the fused point cloud and
+    attach it to ``result`` (best-effort: never breaks the point-cloud path)."""
+    if not bool(settings.mesh_recon_enabled) or str(settings.mesh_recon_backend).lower() == "none":
+        return
+    try:
+        from .mesh_recon import point_cloud_to_mesh
+
+        mesh = point_cloud_to_mesh(points, colors, output_base, log=log, stem="reconstruction_mesh")
+        result.mesh_path = mesh.artifacts.get("mesh_glb") or mesh.artifacts.get("mesh_ply")
+        result.mesh_backend = mesh.backend
+        result.num_faces = mesh.num_faces
+        result.note += f" · 3D object mesh via {mesh.backend} ({mesh.num_faces:,} faces)."
+    except Exception as exc:  # pragma: no cover - best-effort
+        log(f"[recon] object mesh reconstruction skipped ({exc})")
 
 
 def _noposplat(image_paths: list[Path], output_base: Path, log: LogFn) -> ReconResult | None:
